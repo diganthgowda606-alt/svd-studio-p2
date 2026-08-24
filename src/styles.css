@@ -62,40 +62,53 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.129 0.042 264.695);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.129 0.042 264.695);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.208 0.042 265.755);
-  --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.968 0.007 247.896);
-  --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.968 0.007 247.896);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.968 0.007 247.896);
-  --accent-foreground: oklch(0.208 0.042 265.755);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.929 0.013 255.508);
-  --input: oklch(0.929 0.013 255.508);
-  --ring: oklch(0.704 0.04 256.788);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.984 0.003 247.858);
-  --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-primary: oklch(0.208 0.042 265.755);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
+  --radius: 1rem;
+
+  /* Aura Harmony palette — warm minimalist interior */
+  --greige: oklch(0.74 0.021 82);
+  --greige-deep: oklch(0.66 0.023 80);
+  --cream: oklch(0.951 0.014 85);
+  --charcoal: oklch(0.315 0.012 62);
+  --sienna: oklch(0.405 0.084 45);
+  --walnut: oklch(0.33 0.038 55);
+
+  --background: var(--greige);
+  --foreground: var(--cream);
+  --card: var(--greige-deep);
+  --card-foreground: var(--cream);
+  --popover: var(--greige-deep);
+  --popover-foreground: var(--cream);
+  --primary: var(--sienna);
+  --primary-foreground: var(--cream);
+  --secondary: var(--charcoal);
+  --secondary-foreground: var(--cream);
+  --muted: oklch(0.7 0.02 82);
+  --muted-foreground: oklch(0.88 0.014 85);
+  --accent: var(--walnut);
+  --accent-foreground: var(--cream);
+  --destructive: oklch(0.5 0.12 30);
+  --destructive-foreground: var(--cream);
+  --border: oklch(0.951 0.014 85 / 28%);
+  --input: oklch(0.951 0.014 85 / 22%);
+  --ring: var(--cream);
+  --chart-1: var(--sienna);
+  --chart-2: var(--charcoal);
+  --chart-3: var(--cream);
+  --chart-4: var(--walnut);
+  --chart-5: var(--greige-deep);
+  --sidebar: var(--greige-deep);
+  --sidebar-foreground: var(--cream);
+  --sidebar-primary: var(--sienna);
+  --sidebar-primary-foreground: var(--cream);
+  --sidebar-accent: var(--charcoal);
+  --sidebar-accent-foreground: var(--cream);
+  --sidebar-border: oklch(0.951 0.014 85 / 24%);
+  --sidebar-ring: var(--cream);
+
+  --font-display: "Cormorant Garamond", Georgia, serif;
+  --font-body: "Jost", ui-sans-serif, system-ui, sans-serif;
 }
+
 
 .dark {
   --background: oklch(0.129 0.042 264.695);
@@ -141,4 +154,51 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
   }
+}
+
+@theme inline {
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --color-cream: var(--cream);
+  --color-charcoal: var(--charcoal);
+  --color-sienna: var(--sienna);
+  --color-walnut: var(--walnut);
+  --color-greige: var(--greige);
+  --color-greige-deep: var(--greige-deep);
+}
+
+@layer base {
+  body {
+    font-family: var(--font-body);
+    font-weight: 300;
+    letter-spacing: 0.01em;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 300;
+  }
+}
+
+@utility grain-veil {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.35;
+    background-image: radial-gradient(
+      circle at 20% 10%,
+      color-mix(in oklab, var(--cream) 14%, transparent),
+      transparent 55%
+    );
+  }
+}
+
+@utility panel {
+  background: color-mix(in oklab, var(--greige-deep) 88%, var(--charcoal));
+  border: 1px solid color-mix(in oklab, var(--cream) 22%, transparent);
+  backdrop-filter: blur(8px);
 }
