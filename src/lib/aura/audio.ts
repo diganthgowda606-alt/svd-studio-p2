@@ -69,7 +69,7 @@ export function playPiano(note: string, velocity = 0.8) {
 }
 
 export function pluckGuitar(note: string, velocity = 0.8) {
-  guitar?.triggerAttackRelease(note, undefined, undefined, velocity);
+  guitar?.triggerAttackRelease(note, "8n", undefined, velocity);
 }
 
 export function getWaveform(): Float32Array | null {
