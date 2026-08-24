@@ -7,19 +7,30 @@ import {
   isAudioStarted,
   pluckGuitar,
   playPiano,
+  playDrum,
   setMasterVolume,
   startAudio,
   transpose,
   getWaveform,
   type InstrumentKind,
 } from "@/lib/aura/audio";
+import { DRUM_KIT, pieceAt, type DrumPiece } from "@/lib/aura/drumKit";
 import { buildHands, createHandLandmarker, type Hand } from "@/lib/aura/handTracking";
 
-type Ripple = { x: number; y: number; r: number; max: number; tone: "sienna" | "charcoal" };
+type Ripple = { x: number; y: number; r: number; max: number; tone: "sienna" | "charcoal" | "cream" };
 
 const CREAM = "rgba(243, 236, 224, ";
 const CHARCOAL = "rgba(60, 53, 45, ";
 const SIENNA = "rgba(122, 60, 35, ";
+const COPPER = "rgba(154, 84, 48, ";
+const BRASS = "rgba(226, 214, 190, ";
+
+const FINGER_TIPS = [4, 8, 12, 16, 20];
+const FINGER_NAMES = ["Thumb", "Index", "Middle", "Ring", "Pinky"];
+
+/** virtual key plane — a fingertip below this line is "pressing" */
+const PRESS_Y = 0.66;
+const RELEASE_Y = 0.6;
 
 const CONNECTIONS: [number, number][] = [
   [0, 1],
@@ -45,6 +56,8 @@ const CONNECTIONS: [number, number][] = [
   [0, 17],
 ];
 
+type HandMotion = { y: number; vy: number; lastStrike: number };
+
 export default function PerformanceStage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -54,9 +67,11 @@ export default function PerformanceStage() {
   const [status, setStatus] = useState<string>("idle");
   const [volume, setVolume] = useState(0.7);
   const [activeNote, setActiveNote] = useState<string | null>(null);
-  const [activeKeyIndex, setActiveKeyIndex] = useState<number | null>(null);
+  const [activeKeys, setActiveKeys] = useState<number[]>([]);
   const [stringPulse, setStringPulse] = useState<Record<number, number>>({});
   const [handsSeen, setHandsSeen] = useState(0);
+  const [fingersTracked, setFingersTracked] = useState(0);
+  const [lastHit, setLastHit] = useState<string | null>(null);
 
   const instrumentRef = useRef(instrument);
   instrumentRef.current = instrument;
@@ -65,35 +80,46 @@ export default function PerformanceStage() {
   const handsRef = useRef<Hand[]>([]);
   const rafRef = useRef<number | null>(null);
   const landmarkerRef = useRef<Awaited<ReturnType<typeof createHandLandmarker>> | null>(null);
-  const lastTriggerRef = useRef(0);
-  const pinchLatchRef = useRef(false);
   const stringLatchRef = useRef<Record<number, number>>({});
   const fretRef = useRef(0);
   const stringVibrationRef = useRef<Record<number, number>>({});
+
+  // piano: per-hand, per-finger latch state
+  const fingerLatchRef = useRef<Record<string, boolean>>({});
+  const activeKeysRef = useRef<Set<number>>(new Set());
+  const pressedTipsRef = useRef<{ x: number; y: number }[]>([]);
+
+  // drums
+  const handMotionRef = useRef<Record<number, HandMotion>>({});
+  const pieceGlowRef = useRef<Record<string, number>>({});
+  const kickGlowRef = useRef(0);
+  const lastKickRef = useRef(0);
 
   useEffect(() => {
     setMasterVolume(volume);
   }, [volume]);
 
-  const addRipple = useCallback((x: number, y: number, tone: Ripple["tone"]) => {
-    ripplesRef.current.push({ x, y, r: 4, max: 180 + Math.random() * 120, tone });
-    if (ripplesRef.current.length > 40) ripplesRef.current.shift();
+  const addRipple = useCallback((x: number, y: number, tone: Ripple["tone"], max = 220) => {
+    ripplesRef.current.push({ x, y, r: 4, max, tone });
+    if (ripplesRef.current.length > 60) ripplesRef.current.shift();
   }, []);
 
   const triggerPiano = useCallback(
     (noteIndex: number, x: number, y: number, velocity: number) => {
-      const now = performance.now();
-      if (now - lastTriggerRef.current < 90) return;
-      lastTriggerRef.current = now;
       const note = PIANO_NOTES[noteIndex] ?? "C4";
       playPiano(note, velocity);
       setActiveNote(note);
-      setActiveKeyIndex(noteIndex);
-      addRipple(x, y, "sienna");
-      window.setTimeout(() => setActiveKeyIndex((k) => (k === noteIndex ? null : k)), 260);
+      activeKeysRef.current.add(noteIndex);
+      setActiveKeys([...activeKeysRef.current]);
+      addRipple(x, y, "sienna", 160 + Math.random() * 120);
     },
     [addRipple],
   );
+
+  const releasePiano = useCallback((noteIndex: number) => {
+    activeKeysRef.current.delete(noteIndex);
+    setActiveKeys([...activeKeysRef.current]);
+  }, []);
 
   const triggerString = useCallback(
     (stringIndex: number, x: number, y: number, velocity: number) => {
@@ -108,65 +134,260 @@ export default function PerformanceStage() {
     [addRipple],
   );
 
-  const analyse = useCallback(
+  const strikePiece = useCallback(
+    (piece: DrumPiece, velocity: number, w: number, h: number) => {
+      playDrum(piece.voice, Math.min(1, Math.max(0.25, velocity)));
+      pieceGlowRef.current[piece.id] = 1;
+      setLastHit(piece.label);
+      setActiveNote(piece.label);
+      addRipple(
+        piece.cx * w,
+        piece.cy * h,
+        piece.kind === "cymbal" ? "cream" : "sienna",
+        piece.kind === "cymbal" ? 300 : 200,
+      );
+    },
+    [addRipple],
+  );
+
+  /* ---------------- gesture analysis ---------------- */
+
+  const analysePiano = useCallback(
     (hands: Hand[], w: number, h: number) => {
-      if (instrumentRef.current === "piano") {
-        const pitchHand = hands[0];
-        const triggerHand = hands[1] ?? hands[0];
-        if (!pitchHand || !triggerHand) {
-          pinchLatchRef.current = false;
-          return;
-        }
-        const heightNorm = 1 - Math.min(Math.max(pitchHand.palm.y, 0.05), 0.95);
-        const idx = Math.min(
-          PIANO_NOTES.length - 1,
-          Math.floor(((heightNorm - 0.05) / 0.9) * PIANO_NOTES.length),
-        );
-        setActiveKeyIndex((prev) => (prev === null ? prev : prev));
-        const pinched = triggerHand.pinch < 0.42;
-        if (pinched && !pinchLatchRef.current) {
-          pinchLatchRef.current = true;
-          triggerPiano(
-            Math.max(0, idx),
-            (1 - triggerHand.pinchPoint.x) * w,
-            triggerHand.pinchPoint.y * h,
-            0.55 + (1 - triggerHand.pinch) * 0.4,
+      const pressed: { x: number; y: number }[] = [];
+      const stillDown = new Set<number>();
+      let tips = 0;
+
+      hands.forEach((hand, hi) => {
+        FINGER_TIPS.forEach((lmIndex, fi) => {
+          const tip = hand.landmarks[lmIndex];
+          if (!tip) return;
+          tips += 1;
+          const dx = 1 - tip.x; // display space (mirrored)
+          const key = `${hi}-${fi}`;
+          const idx = Math.min(
+            PIANO_NOTES.length - 1,
+            Math.max(0, Math.floor(((dx - 0.04) / 0.92) * PIANO_NOTES.length)),
           );
-        } else if (!pinched && triggerHand.pinch > 0.55) {
-          pinchLatchRef.current = false;
-        }
-      } else {
-        // fret hand = leftmost hand (pinch height sets semitone offset)
-        const sorted = [...hands].sort((a, b) => a.palm.x - b.palm.x);
-        const fretHand = sorted.length > 1 ? sorted[0] : undefined;
-        const strumHand = sorted.length > 1 ? sorted[1] : sorted[0];
-        if (fretHand) {
-          const pinched = fretHand.pinch < 0.5;
-          fretRef.current = pinched
-            ? Math.round((1 - Math.min(Math.max(fretHand.palm.y, 0.1), 0.9)) * 7)
-            : 0;
-        } else {
-          fretRef.current = 0;
-        }
-        if (!strumHand) return;
-        const tip = strumHand.landmarks[8] ?? strumHand.palm;
-        const y = tip.y;
-        const x = 1 - tip.x;
-        const now = performance.now();
-        GUITAR_STRINGS.forEach((_, i) => {
-          const lineY = 0.24 + (i * 0.52) / (GUITAR_STRINGS.length - 1);
-          if (Math.abs(y - lineY) < 0.028) {
-            const last = stringLatchRef.current[i] ?? 0;
-            if (now - last > 220) {
-              stringLatchRef.current[i] = now;
-              triggerString(i, x * w, lineY * h, 0.6 + Math.random() * 0.3);
-            }
+          const latched = fingerLatchRef.current[key] ?? false;
+
+          if (!latched && tip.y > PRESS_Y) {
+            fingerLatchRef.current[key] = true;
+            const depth = Math.min(1, (tip.y - PRESS_Y) / 0.2);
+            triggerPiano(idx, dx * w, tip.y * h, 0.45 + depth * 0.5);
+          } else if (latched && tip.y < RELEASE_Y) {
+            fingerLatchRef.current[key] = false;
+            releasePiano(idx);
+          }
+          if (fingerLatchRef.current[key]) {
+            stillDown.add(idx);
+            pressed.push({ x: dx, y: tip.y });
           }
         });
+      });
+
+      setFingersTracked(tips);
+      pressedTipsRef.current = pressed;
+
+      // clean up keys whose finger left the frame
+      let changed = false;
+      for (const k of [...activeKeysRef.current]) {
+        if (!stillDown.has(k)) {
+          activeKeysRef.current.delete(k);
+          changed = true;
+        }
+      }
+      if (changed) setActiveKeys([...activeKeysRef.current]);
+    },
+    [releasePiano, triggerPiano],
+  );
+
+  const analyseGuitar = useCallback(
+    (hands: Hand[], w: number, h: number) => {
+      const sorted = [...hands].sort((a, b) => a.palm.x - b.palm.x);
+      const fretHand = sorted.length > 1 ? sorted[0] : undefined;
+      const strumHand = sorted.length > 1 ? sorted[1] : sorted[0];
+      if (fretHand) {
+        const pinched = fretHand.pinch < 0.5;
+        fretRef.current = pinched
+          ? Math.round((1 - Math.min(Math.max(fretHand.palm.y, 0.1), 0.9)) * 7)
+          : 0;
+      } else {
+        fretRef.current = 0;
+      }
+      if (!strumHand) return;
+      const tip = strumHand.landmarks[8] ?? strumHand.palm;
+      const y = tip.y;
+      const x = 1 - tip.x;
+      const now = performance.now();
+      GUITAR_STRINGS.forEach((_, i) => {
+        const lineY = 0.24 + (i * 0.52) / (GUITAR_STRINGS.length - 1);
+        if (Math.abs(y - lineY) < 0.028) {
+          const last = stringLatchRef.current[i] ?? 0;
+          if (now - last > 220) {
+            stringLatchRef.current[i] = now;
+            triggerString(i, x * w, lineY * h, 0.6 + Math.random() * 0.3);
+          }
+        }
+      });
+    },
+    [triggerString],
+  );
+
+  const analyseDrums = useCallback(
+    (hands: Hand[], w: number, h: number) => {
+      const now = performance.now();
+      const strikes: { x: number; y: number; velocity: number }[] = [];
+
+      hands.forEach((hand, hi) => {
+        // mean of the whole landmark cluster = stable hand vector
+        let sy = 0;
+        let sx = 0;
+        for (const p of hand.landmarks) {
+          sy += p.y;
+          sx += 1 - p.x;
+        }
+        const y = sy / Math.max(1, hand.landmarks.length);
+        const x = sx / Math.max(1, hand.landmarks.length);
+
+        const prev = handMotionRef.current[hi] ?? { y, vy: 0, lastStrike: 0 };
+        const vy = y - prev.y;
+        // accelerating downward then reversing = strike
+        const reversed = prev.vy > 0.014 && vy < prev.vy * 0.45;
+        if (reversed && now - prev.lastStrike > 110) {
+          strikes.push({ x, y, velocity: Math.min(1, 0.35 + prev.vy * 16) });
+          handMotionRef.current[hi] = { y, vy, lastStrike: now };
+        } else {
+          handMotionRef.current[hi] = { y, vy, lastStrike: prev.lastStrike };
+        }
+      });
+
+      // both hands pumping together -> double kick
+      if (strikes.length === 2 && now - lastKickRef.current > 90) {
+        const avgLow = (strikes[0]!.y + strikes[1]!.y) / 2;
+        if (avgLow > 0.55) {
+          lastKickRef.current = now;
+          kickGlowRef.current = 1;
+          const kicks = DRUM_KIT.filter((p) => p.kind === "kick");
+          kicks.forEach((k, i) =>
+            window.setTimeout(
+              () => strikePiece(k, 0.95, w, h),
+              i * 45,
+            ),
+          );
+          return;
+        }
+      }
+
+      for (const s of strikes) {
+        const piece = pieceAt(s.x, s.y);
+        if (piece) strikePiece(piece, s.velocity, w, h);
       }
     },
-    [triggerPiano, triggerString],
+    [strikePiece],
   );
+
+  const analyse = useCallback(
+    (hands: Hand[], w: number, h: number) => {
+      if (instrumentRef.current === "piano") analysePiano(hands, w, h);
+      else if (instrumentRef.current === "guitar") analyseGuitar(hands, w, h);
+      else analyseDrums(hands, w, h);
+    },
+    [analyseDrums, analyseGuitar, analysePiano],
+  );
+
+  /* ---------------- rendering ---------------- */
+
+  const drawKit = useCallback((ctx: CanvasRenderingContext2D, w: number, h: number) => {
+    // rack scaffolding
+    ctx.strokeStyle = CHARCOAL + "0.85)";
+    ctx.lineWidth = Math.max(2, w * 0.0035);
+    ctx.beginPath();
+    ctx.moveTo(w * 0.08, h * 0.94);
+    ctx.lineTo(w * 0.08, h * 0.34);
+    ctx.lineTo(w * 0.92, h * 0.3);
+    ctx.lineTo(w * 0.92, h * 0.94);
+    ctx.stroke();
+
+    for (const piece of DRUM_KIT) {
+      const cx = piece.cx * w;
+      const cy = piece.cy * h;
+      const rx = piece.rx * w;
+      const ry = piece.ry * h;
+      const glow = pieceGlowRef.current[piece.id] ?? 0;
+      pieceGlowRef.current[piece.id] = glow * 0.9;
+
+      // stand
+      if (piece.kind !== "kick") {
+        ctx.strokeStyle = CHARCOAL + "0.75)";
+        ctx.lineWidth = Math.max(1.5, w * 0.002);
+        ctx.beginPath();
+        ctx.moveTo(cx, cy + ry);
+        ctx.lineTo(cx + (cx > w / 2 ? 8 : -8), h * 0.95);
+        ctx.stroke();
+      }
+
+      if (piece.kind === "cymbal") {
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(piece.tilt ?? 0);
+        ctx.fillStyle = BRASS + (0.28 + glow * 0.55).toFixed(3) + ")";
+        ctx.beginPath();
+        ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = CREAM + (0.55 + glow * 0.4).toFixed(3) + ")";
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+        // lathe grooves
+        for (let i = 1; i <= 3; i++) {
+          ctx.strokeStyle = CHARCOAL + (0.22 + glow * 0.2).toFixed(3) + ")";
+          ctx.beginPath();
+          ctx.ellipse(0, 0, (rx * i) / 4, (ry * i) / 4, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      } else {
+        const depth = piece.kind === "kick" ? ry * 0.55 : ry * 1.6;
+        // shell body
+        ctx.fillStyle = COPPER + (0.5 + glow * 0.4).toFixed(3) + ")";
+        ctx.beginPath();
+        ctx.ellipse(cx, cy + depth, rx, ry, 0, 0, Math.PI);
+        ctx.rect(cx - rx, cy, rx * 2, depth);
+        ctx.fill();
+        // head
+        ctx.fillStyle = SIENNA + (0.55 + glow * 0.45).toFixed(3) + ")";
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = CREAM + (0.4 + glow * 0.5).toFixed(3) + ")";
+        ctx.lineWidth = piece.kind === "kick" ? 3 : 2;
+        ctx.stroke();
+        // lugs
+        const lugs = piece.kind === "kick" ? 10 : 8;
+        for (let i = 0; i < lugs; i++) {
+          const a = (i / lugs) * Math.PI * 2;
+          ctx.fillStyle = CHARCOAL + "0.9)";
+          ctx.beginPath();
+          ctx.arc(cx + Math.cos(a) * rx * 0.94, cy + Math.sin(a) * ry * 0.94, 2.4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        if (piece.kind === "kick") {
+          const k = kickGlowRef.current;
+          kickGlowRef.current = k * 0.88;
+          ctx.strokeStyle = CREAM + (0.15 + k * 0.6).toFixed(3) + ")";
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, rx * 0.55, ry * 0.55, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      ctx.fillStyle = CREAM + (0.35 + glow * 0.5).toFixed(3) + ")";
+      ctx.font = `${Math.max(9, w * 0.0095)}px system-ui`;
+      ctx.textAlign = "center";
+      ctx.fillText(piece.label.toUpperCase(), cx, cy - ry - 7);
+    }
+  }, []);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -178,19 +399,30 @@ export default function PerformanceStage() {
     const h = canvas.height;
     ctx.clearRect(0, 0, w, h);
 
-    // instrument guides
-    ctx.lineWidth = 1;
     if (instrumentRef.current === "piano") {
-      const rows = PIANO_NOTES.length;
-      for (let i = 0; i <= rows; i++) {
-        const y = ((rows - i) / rows) * h;
-        ctx.strokeStyle = CREAM + (i % 2 === 0 ? "0.16)" : "0.08)");
-        ctx.beginPath();
-        ctx.moveTo(w * 0.06, y);
-        ctx.lineTo(w * 0.94, y);
-        ctx.stroke();
+      // key plane
+      const planeY = PRESS_Y * h;
+      ctx.strokeStyle = CREAM + "0.4)";
+      ctx.setLineDash([6, 8]);
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(w * 0.04, planeY);
+      ctx.lineTo(w * 0.96, planeY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const count = PIANO_NOTES.length;
+      for (let i = 0; i < count; i++) {
+        const x0 = w * 0.04 + (i / count) * w * 0.92;
+        const x1 = w * 0.04 + ((i + 1) / count) * w * 0.92;
+        const on = activeKeysRef.current.has(i);
+        ctx.fillStyle = on ? SIENNA + "0.6)" : CREAM + "0.07)";
+        ctx.fillRect(x0 + 1, planeY, x1 - x0 - 2, h - planeY);
+        ctx.strokeStyle = CREAM + (on ? "0.7)" : "0.18)");
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x0 + 1, planeY, x1 - x0 - 2, h - planeY);
       }
-    } else {
+    } else if (instrumentRef.current === "guitar") {
       GUITAR_STRINGS.forEach((_, i) => {
         const y = (0.24 + (i * 0.52) / (GUITAR_STRINGS.length - 1)) * h;
         const vib = stringVibrationRef.current[i] ?? 0;
@@ -206,6 +438,8 @@ export default function PerformanceStage() {
         }
         ctx.stroke();
       });
+    } else {
+      drawKit(ctx, w, h);
     }
 
     // waveform band
@@ -228,7 +462,8 @@ export default function PerformanceStage() {
     for (const r of ripplesRef.current) {
       r.r += (r.max - r.r) * 0.045 + 1.2;
       const alpha = Math.max(0, 1 - r.r / r.max) * 0.55;
-      ctx.strokeStyle = (r.tone === "sienna" ? SIENNA : CHARCOAL) + alpha.toFixed(3) + ")";
+      const tone = r.tone === "sienna" ? SIENNA : r.tone === "cream" ? BRASS : CHARCOAL;
+      ctx.strokeStyle = tone + alpha.toFixed(3) + ")";
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
@@ -239,7 +474,7 @@ export default function PerformanceStage() {
       ctx.stroke();
     }
 
-    // hands
+    // full skeleton rig
     for (const hand of handsRef.current) {
       const pts = hand.landmarks.map((p) => ({ x: (1 - p.x) * w, y: p.y * h }));
       ctx.strokeStyle = CREAM + "0.72)";
@@ -253,22 +488,31 @@ export default function PerformanceStage() {
         ctx.lineTo(pb.x, pb.y);
         ctx.stroke();
       }
-      for (const p of pts) {
-        ctx.fillStyle = CHARCOAL + "0.85)";
+      pts.forEach((p, i) => {
+        const isTip = FINGER_TIPS.includes(i);
+        ctx.fillStyle = isTip ? SIENNA + "0.95)" : CHARCOAL + "0.85)";
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 3.2, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, isTip ? 5 : 3, 0, Math.PI * 2);
         ctx.fill();
-      }
-      const pp = pts[8];
-      if (pp) {
-        ctx.strokeStyle = SIENNA + "0.9)";
+        if (isTip) {
+          ctx.strokeStyle = CREAM + "0.8)";
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+        }
+      });
+    }
+
+    // pressed fingertip halos (piano)
+    if (instrumentRef.current === "piano") {
+      for (const p of pressedTipsRef.current) {
+        ctx.strokeStyle = SIENNA + "0.85)";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(pp.x, pp.y, 12 + (hand.pinch < 0.42 ? 8 : 0), 0, Math.PI * 2);
+        ctx.arc(p.x * w, p.y * h, 16, 0, Math.PI * 2);
         ctx.stroke();
       }
     }
-  }, []);
+  }, [drawKit]);
 
   const loop = useCallback(() => {
     const video = videoRef.current;
@@ -341,7 +585,9 @@ export default function PerformanceStage() {
         </div>
         <div className="text-right text-xs tracking-[0.2em] text-cream/70 uppercase">
           <p>{status}</p>
-          <p>{handsSeen} hand{handsSeen === 1 ? "" : "s"} in frame</p>
+          <p>
+            {handsSeen} hand{handsSeen === 1 ? "" : "s"} · {fingersTracked}/10 digits
+          </p>
         </div>
       </header>
 
@@ -368,8 +614,8 @@ export default function PerformanceStage() {
                   className="absolute inset-0 flex flex-col items-center justify-center gap-6 bg-greige-deep/85 text-center"
                 >
                   <p className="max-w-sm text-sm leading-relaxed tracking-wide text-cream/80">
-                    Grant camera access, then lift your hands into the frame. Nothing leaves your
-                    device.
+                    Grant camera access, then lift both hands into the frame. All ten digits are
+                    tracked. Nothing leaves your device.
                   </p>
                   <button
                     onClick={begin}
@@ -388,17 +634,18 @@ export default function PerformanceStage() {
             <p className="mb-3 text-[0.7rem] tracking-[0.3em] text-cream/70 uppercase">
               Instruments
             </p>
-            <div className="flex rounded-full border border-cream/25 p-1">
+            <div className="flex flex-col gap-1 rounded-3xl border border-cream/25 p-1">
               {(
                 [
-                  ["piano", "Minimalist"],
+                  ["piano", "Minimalist Grand"],
                   ["guitar", "Acoustic"],
+                  ["drums", "Infernal Pulse"],
                 ] as [InstrumentKind, string][]
               ).map(([kind, label]) => (
                 <button
                   key={kind}
                   onClick={() => setInstrument(kind)}
-                  className={`flex-1 rounded-full px-4 py-2 text-xs tracking-[0.2em] uppercase transition-all duration-500 ${
+                  className={`rounded-full px-4 py-2 text-xs tracking-[0.2em] uppercase transition-all duration-500 ${
                     instrument === kind
                       ? "bg-charcoal text-cream"
                       : "text-cream/70 hover:text-cream"
@@ -424,20 +671,27 @@ export default function PerformanceStage() {
             <p className="text-[0.7rem] tracking-[0.3em] text-cream/60 uppercase">Gesture</p>
             {instrument === "piano" ? (
               <p>
-                Raise or lower your first hand to choose the pitch. Pinch thumb and index on the
-                other hand to sound the key.
+                Ten-finger polyphony: horizontal position picks the note, and any fingertip dipping
+                below the dashed key plane sounds it. Play chords and cascading runs in mid-air.
               </p>
-            ) : (
+            ) : instrument === "guitar" ? (
               <p>
                 Pinch with your left hand and move it vertically to fret. Sweep your right hand
                 across the strings to strum.
+              </p>
+            ) : (
+              <p>
+                Hover a hand over a drum or cymbal and make a sharp downward strike. Pump both
+                hands down together low in the frame to fire the double kicks.
               </p>
             )}
           </div>
 
           <div className="mt-auto">
             <p className="text-[0.7rem] tracking-[0.3em] text-cream/60 uppercase">Now sounding</p>
-            <p className="font-display text-4xl text-cream">{activeNote ?? "—"}</p>
+            <p className="font-display text-4xl text-cream">
+              {instrument === "drums" ? (lastHit ?? "—") : (activeNote ?? "—")}
+            </p>
           </div>
         </aside>
       </div>
@@ -446,8 +700,8 @@ export default function PerformanceStage() {
         {instrument === "piano" ? (
           <div className="panel flex h-40 items-end gap-[3px] overflow-hidden rounded-3xl p-3">
             {PIANO_NOTES.map((note, i) => {
-              const active = activeKeyIndex === i;
-              const dark = note.includes("D") || note.includes("G");
+              const active = activeKeys.includes(i);
+              const dark = note.includes("D") || note.includes("G") || note.includes("B");
               return (
                 <motion.div
                   key={note}
@@ -469,7 +723,7 @@ export default function PerformanceStage() {
               );
             })}
           </div>
-        ) : (
+        ) : instrument === "guitar" ? (
           <div className="panel flex h-40 flex-col justify-center gap-4 rounded-3xl px-8">
             {GUITAR_STRINGS.map((s, i) => (
               <motion.div
@@ -481,6 +735,24 @@ export default function PerformanceStage() {
                 transition={{ type: "spring", stiffness: 260, damping: 12 }}
                 className="h-px w-full origin-center bg-cream"
               />
+            ))}
+          </div>
+        ) : (
+          <div className="panel grid grid-cols-3 gap-2 rounded-3xl p-5 sm:grid-cols-5 lg:grid-cols-8">
+            {DRUM_KIT.map((p) => (
+              <motion.div
+                key={p.id}
+                animate={{ opacity: lastHit === p.label ? 1 : 0.7 }}
+                className={`rounded-2xl border px-3 py-4 text-center text-[0.6rem] tracking-[0.18em] uppercase transition-colors duration-300 ${
+                  lastHit === p.label
+                    ? "border-cream/60 bg-sienna text-cream"
+                    : p.kind === "cymbal"
+                      ? "border-cream/30 bg-cream/10 text-cream/80"
+                      : "border-cream/20 bg-charcoal/60 text-cream/70"
+                }`}
+              >
+                {p.label}
+              </motion.div>
             ))}
           </div>
         )}
