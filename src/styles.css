@@ -155,3 +155,50 @@
     color: var(--color-foreground);
   }
 }
+
+@theme inline {
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --color-cream: var(--cream);
+  --color-charcoal: var(--charcoal);
+  --color-sienna: var(--sienna);
+  --color-walnut: var(--walnut);
+  --color-greige: var(--greige);
+  --color-greige-deep: var(--greige-deep);
+}
+
+@layer base {
+  body {
+    font-family: var(--font-body);
+    font-weight: 300;
+    letter-spacing: 0.01em;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 300;
+  }
+}
+
+@utility grain-veil {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.35;
+    background-image: radial-gradient(
+      circle at 20% 10%,
+      color-mix(in oklab, var(--cream) 14%, transparent),
+      transparent 55%
+    );
+  }
+}
+
+@utility panel {
+  background: color-mix(in oklab, var(--greige-deep) 88%, var(--charcoal));
+  border: 1px solid color-mix(in oklab, var(--cream) 22%, transparent);
+  backdrop-filter: blur(8px);
+}
