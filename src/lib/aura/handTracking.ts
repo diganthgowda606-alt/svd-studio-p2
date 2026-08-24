@@ -33,9 +33,9 @@ export function buildHands(
   handedness: { categoryName?: string }[][],
 ): Hand[] {
   return landmarkSets.map((lm, i) => {
-    const thumb = lm[4];
-    const index = lm[8];
-    const span = Math.max(dist(lm[0], lm[9]), 0.001);
+    const thumb = lm[4]!;
+    const index = lm[8]!;
+    const span = Math.max(dist(lm[0]!, lm[9]!), 0.001);
     return {
       landmarks: lm,
       handedness: handedness?.[i]?.[0]?.categoryName ?? "Right",
@@ -45,7 +45,7 @@ export function buildHands(
         y: (thumb.y + index.y) / 2,
         z: 0,
       },
-      palm: lm[9],
+      palm: lm[9]!,
     };
   });
 }
