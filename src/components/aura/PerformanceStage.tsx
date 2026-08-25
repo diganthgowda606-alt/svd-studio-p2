@@ -16,6 +16,15 @@ import {
 } from "@/lib/aura/audio";
 import { DRUM_KIT, pieceAt, type DrumPiece } from "@/lib/aura/drumKit";
 import { buildHands, createHandLandmarker, type Hand } from "@/lib/aura/handTracking";
+import {
+  DEFAULT_CALIBRATION,
+  computeCalibration,
+  emptySamples,
+  loadCalibration,
+  saveCalibration,
+  type Calibration,
+  type CalibrationSamples,
+} from "@/lib/aura/calibration";
 
 type Ripple = { x: number; y: number; r: number; max: number; tone: "sienna" | "charcoal" | "cream" };
 
@@ -28,9 +37,9 @@ const BRASS = "rgba(226, 214, 190, ";
 const FINGER_TIPS = [4, 8, 12, 16, 20];
 const FINGER_NAMES = ["Thumb", "Index", "Middle", "Ring", "Pinky"];
 
-/** virtual key plane — a fingertip below this line is "pressing" */
-const PRESS_Y = 0.66;
-const RELEASE_Y = 0.6;
+type CalPhase = "none" | "rest" | "press" | "done";
+const REST_MS = 2600;
+const PRESS_MS = 4200;
 
 const CONNECTIONS: [number, number][] = [
   [0, 1],
@@ -72,6 +81,17 @@ export default function PerformanceStage() {
   const [handsSeen, setHandsSeen] = useState(0);
   const [fingersTracked, setFingersTracked] = useState(0);
   const [lastHit, setLastHit] = useState<string | null>(null);
+  const [calPhase, setCalPhase] = useState<CalPhase>("none");
+  const [calProgress, setCalProgress] = useState(0);
+  const [calibrated, setCalibrated] = useState(false);
+  const [flowIn, setFlowIn] = useState(false);
+
+  const calRef = useRef<Calibration>(DEFAULT_CALIBRATION);
+  const calPhaseRef = useRef<CalPhase>("none");
+  const calStartRef = useRef(0);
+  const calSamplesRef = useRef<CalibrationSamples>(emptySamples());
+  const calPrevYRef = useRef<number | null>(null);
+  const smoothRef = useRef<Record<number, { x: number; y: number; z: number }[]>>({});
 
   const instrumentRef = useRef(instrument);
   instrumentRef.current = instrument;
@@ -98,6 +118,11 @@ export default function PerformanceStage() {
   useEffect(() => {
     setMasterVolume(volume);
   }, [volume]);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setFlowIn(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   const addRipple = useCallback((x: number, y: number, tone: Ripple["tone"], max = 220) => {
     ripplesRef.current.push({ x, y, r: 4, max, tone });
@@ -171,11 +196,11 @@ export default function PerformanceStage() {
           );
           const latched = fingerLatchRef.current[key] ?? false;
 
-          if (!latched && tip.y > PRESS_Y) {
+          if (!latched && tip.y > calRef.current.pressY) {
             fingerLatchRef.current[key] = true;
-            const depth = Math.min(1, (tip.y - PRESS_Y) / 0.2);
+            const depth = Math.min(1, (tip.y - calRef.current.pressY) / 0.2);
             triggerPiano(idx, dx * w, tip.y * h, 0.45 + depth * 0.5);
-          } else if (latched && tip.y < RELEASE_Y) {
+          } else if (latched && tip.y < calRef.current.releaseY) {
             fingerLatchRef.current[key] = false;
             releasePiano(idx);
           }
@@ -208,7 +233,7 @@ export default function PerformanceStage() {
       const fretHand = sorted.length > 1 ? sorted[0] : undefined;
       const strumHand = sorted.length > 1 ? sorted[1] : sorted[0];
       if (fretHand) {
-        const pinched = fretHand.pinch < 0.5;
+        const pinched = fretHand.pinch < calRef.current.pinchThreshold;
         fretRef.current = pinched
           ? Math.round((1 - Math.min(Math.max(fretHand.palm.y, 0.1), 0.9)) * 7)
           : 0;
@@ -253,7 +278,7 @@ export default function PerformanceStage() {
         const prev = handMotionRef.current[hi] ?? { y, vy: 0, lastStrike: 0 };
         const vy = y - prev.y;
         // accelerating downward then reversing = strike
-        const reversed = prev.vy > 0.014 && vy < prev.vy * 0.45;
+        const reversed = prev.vy > calRef.current.strikeVel && vy < prev.vy * 0.45;
         if (reversed && now - prev.lastStrike > 110) {
           strikes.push({ x, y, velocity: Math.min(1, 0.35 + prev.vy * 16) });
           handMotionRef.current[hi] = { y, vy, lastStrike: now };
@@ -401,7 +426,7 @@ export default function PerformanceStage() {
 
     if (instrumentRef.current === "piano") {
       // key plane
-      const planeY = PRESS_Y * h;
+      const planeY = calRef.current.pressY * h;
       ctx.strokeStyle = CREAM + "0.4)";
       ctx.setLineDash([6, 8]);
       ctx.lineWidth = 1.2;
@@ -514,6 +539,81 @@ export default function PerformanceStage() {
     }
   }, [drawKit]);
 
+  /** exponential smoothing of landmarks — removes tracker jitter before any trigger test */
+  const smoothHands = useCallback((hands: Hand[]) => {
+    const a = calRef.current.smoothing;
+    hands.forEach((hand, i) => {
+      const prev = smoothRef.current[i];
+      if (prev && prev.length === hand.landmarks.length) {
+        hand.landmarks = hand.landmarks.map((p, j) => {
+          const q = prev[j]!;
+          return {
+            x: q.x + (p.x - q.x) * a,
+            y: q.y + (p.y - q.y) * a,
+            z: q.z + (p.z - q.z) * a,
+          };
+        });
+      }
+      smoothRef.current[i] = hand.landmarks.map((p) => ({ ...p }));
+      const thumb = hand.landmarks[4]!;
+      const index = hand.landmarks[8]!;
+      const span = Math.max(Math.hypot(hand.landmarks[0]!.x - hand.landmarks[9]!.x, hand.landmarks[0]!.y - hand.landmarks[9]!.y), 0.001);
+      hand.pinch = Math.hypot(thumb.x - index.x, thumb.y - index.y) / span;
+      hand.pinchPoint = { x: (thumb.x + index.x) / 2, y: (thumb.y + index.y) / 2, z: 0 };
+      hand.palm = hand.landmarks[9]!;
+    });
+    if (hands.length < Object.keys(smoothRef.current).length) {
+      for (const k of Object.keys(smoothRef.current)) {
+        if (Number(k) >= hands.length) delete smoothRef.current[Number(k)];
+      }
+    }
+  }, []);
+
+  const sampleCalibration = useCallback((hands: Hand[]) => {
+    const phase = calPhaseRef.current;
+    const now = performance.now();
+    const elapsed = now - calStartRef.current;
+    const total = phase === "rest" ? REST_MS : PRESS_MS;
+    setCalProgress(Math.min(1, elapsed / total));
+
+    if (hands.length) {
+      const tips = hands.flatMap((h) => FINGER_TIPS.map((i) => h.landmarks[i]!.y));
+      const meanY = tips.reduce((s, v) => s + v, 0) / tips.length;
+      const maxY = Math.max(...tips);
+      const prevY = calPrevYRef.current;
+      const dy = prevY === null ? 0 : meanY - prevY;
+      calPrevYRef.current = meanY;
+
+      if (phase === "rest") {
+        calSamplesRef.current.restY.push(meanY);
+        calSamplesRef.current.restJitter.push(Math.abs(dy));
+      } else if (phase === "press") {
+        calSamplesRef.current.pressYs.push(maxY);
+        if (dy > 0) calSamplesRef.current.peakVels.push(dy);
+        for (const h of hands) calSamplesRef.current.pinches.push(h.pinch);
+      }
+    }
+
+    if (elapsed < total) return;
+
+    if (phase === "rest") {
+      calPhaseRef.current = "press";
+      calStartRef.current = now;
+      calPrevYRef.current = null;
+      setCalPhase("press");
+      setCalProgress(0);
+      return;
+    }
+
+    const cal = computeCalibration(calSamplesRef.current);
+    calRef.current = cal;
+    saveCalibration(cal);
+    calPhaseRef.current = "done";
+    setCalPhase("done");
+    setCalibrated(true);
+    setStatus("live");
+  }, []);
+
   const loop = useCallback(() => {
     const video = videoRef.current;
     const landmarker = landmarkerRef.current;
@@ -524,20 +624,37 @@ export default function PerformanceStage() {
           (res.landmarks ?? []) as never,
           (res.handedness ?? []) as never,
         );
+        smoothHands(hands);
         handsRef.current = hands;
         setHandsSeen(hands.length);
         const canvas = canvasRef.current;
-        if (canvas) analyse(hands, canvas.width, canvas.height);
+        if (canvas) {
+          const phase = calPhaseRef.current;
+          if (phase === "rest" || phase === "press") sampleCalibration(hands);
+          else analyse(hands, canvas.width, canvas.height);
+        }
       } catch {
         /* frame skipped */
       }
     }
     draw();
     rafRef.current = requestAnimationFrame(loop);
-  }, [analyse, draw]);
+  }, [analyse, draw, sampleCalibration, smoothHands]);
 
-  const begin = useCallback(async () => {
+  const startCalibration = useCallback(() => {
+    calSamplesRef.current = emptySamples();
+    calPrevYRef.current = null;
+    calStartRef.current = performance.now();
+    calPhaseRef.current = "rest";
+    setCalPhase("rest");
+    setCalProgress(0);
+    setCalibrated(false);
+    setStatus("calibrating…");
+  }, []);
+
+  const begin = useCallback(async (recalibrate = false) => {
     setStatus("waking the room…");
+    setCalProgress(0);
     try {
       await startAudio();
       setMasterVolume(volume);
@@ -557,13 +674,23 @@ export default function PerformanceStage() {
       setStatus("listening for hands…");
       landmarkerRef.current = await createHandLandmarker();
       setRunning(true);
-      setStatus("live");
+
+      const saved = loadCalibration();
+      if (saved && !recalibrate) {
+        calRef.current = saved;
+        calPhaseRef.current = "done";
+        setCalPhase("done");
+        setCalibrated(true);
+        setStatus("live");
+      } else {
+        startCalibration();
+      }
       rafRef.current = requestAnimationFrame(loop);
     } catch (err) {
       console.error(err);
       setStatus("camera unavailable — allow webcam access and try again");
     }
-  }, [loop, volume]);
+  }, [loop, startCalibration, volume]);
 
   useEffect(() => {
     return () => {
@@ -574,8 +701,19 @@ export default function PerformanceStage() {
     };
   }, []);
 
+  const calibrating = calPhase === "rest" || calPhase === "press";
+
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 pb-20 pt-10">
+    <motion.div
+      initial={{ opacity: 0, y: 28, scale: 0.985, filter: "blur(12px)" }}
+      animate={
+        flowIn
+          ? { opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }
+          : { opacity: 0, y: 28, scale: 0.985, filter: "blur(12px)" }
+      }
+      transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+      className="mx-auto w-full max-w-6xl px-6 pb-20 pt-10"
+    >
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-4xl tracking-[0.18em] text-cream uppercase">Aura Harmony</h1>
@@ -618,11 +756,43 @@ export default function PerformanceStage() {
                     tracked. Nothing leaves your device.
                   </p>
                   <button
-                    onClick={begin}
+                    onClick={() => begin(false)}
                     className="rounded-full bg-sienna px-10 py-3 text-sm tracking-[0.3em] text-cream uppercase transition-all duration-500 hover:scale-105 hover:bg-charcoal"
                   >
                     start
                   </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {calibrating && (
+                <motion.div
+                  key={calPhase}
+                  initial={{ opacity: 0, filter: "blur(8px)" }}
+                  animate={{ opacity: 1, filter: "blur(0px)" }}
+                  exit={{ opacity: 0, filter: "blur(8px)" }}
+                  transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-greige-deep/80 px-8 text-center backdrop-blur-[2px]"
+                >
+                  <p className="text-[0.7rem] tracking-[0.4em] text-cream/70 uppercase">
+                    calibration · step {calPhase === "rest" ? 1 : 2} of 2
+                  </p>
+                  <p className="max-w-sm text-sm leading-relaxed tracking-wide text-cream/85">
+                    {calPhase === "rest"
+                      ? "Hold both hands still and relaxed in front of the camera — we're measuring your resting position and tracker noise."
+                      : "Now press down and lift a few times, as if tapping keys or striking a drum, at your natural speed."}
+                  </p>
+                  <div className="h-[3px] w-56 overflow-hidden rounded-full bg-cream/20">
+                    <motion.div
+                      className="h-full bg-sienna"
+                      animate={{ width: `${Math.round(calProgress * 100)}%` }}
+                      transition={{ duration: 0.2, ease: "linear" }}
+                    />
+                  </div>
+                  <p className="text-[0.65rem] tracking-[0.3em] text-cream/55 uppercase">
+                    {handsSeen ? `${handsSeen} hand${handsSeen === 1 ? "" : "s"} detected` : "show your hands"}
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -655,6 +825,22 @@ export default function PerformanceStage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[0.7rem] tracking-[0.3em] text-cream/70 uppercase">Gestures</p>
+              <span className="text-[0.6rem] tracking-[0.2em] text-cream/50 uppercase">
+                {calibrated ? "calibrated" : calibrating ? "measuring" : "default"}
+              </span>
+            </div>
+            <button
+              onClick={() => (running ? startCalibration() : begin(true))}
+              disabled={calibrating}
+              className="w-full rounded-full border border-cream/25 px-4 py-2 text-[0.65rem] tracking-[0.25em] text-cream/80 uppercase transition-all duration-500 hover:bg-charcoal hover:text-cream disabled:opacity-40"
+            >
+              recalibrate
+            </button>
           </div>
 
           <div>
@@ -759,6 +945,6 @@ export default function PerformanceStage() {
       </section>
 
       {!isAudioStarted() && null}
-    </div>
+    </motion.div>
   );
 }

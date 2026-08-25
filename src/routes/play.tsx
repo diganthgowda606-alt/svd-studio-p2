@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Suspense, lazy, useEffect, useState } from "react";
+import { motion } from "motion/react";
 
 const PerformanceStage = lazy(() => import("@/components/aura/PerformanceStage"));
 
@@ -26,10 +27,11 @@ export const Route = createFileRoute("/play")({
 
 function Play() {
   const [mounted, setMounted] = useState(false);
+  const [veiled, setVeiled] = useState(true);
   useEffect(() => setMounted(true), []);
 
   return (
-    <main className="grain-veil min-h-screen bg-greige">
+    <main className="grain-veil relative min-h-screen bg-greige">
       {mounted ? (
         <Suspense fallback={<Loading />}>
           <PerformanceStage />
@@ -37,6 +39,16 @@ function Play() {
       ) : (
         <Loading />
       )}
+
+      {/* flow-in veil: opaque on first paint, dissolving into the room */}
+      <motion.div
+        initial={{ opacity: 1 }}
+        animate={{ opacity: 0 }}
+        transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+        onAnimationComplete={() => setVeiled(false)}
+        style={{ display: veiled ? "block" : "none" }}
+        className="pointer-events-none fixed inset-0 z-40 bg-greige"
+      />
     </main>
   );
 }

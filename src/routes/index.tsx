@@ -1,7 +1,8 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ClientOnly } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { Suspense, lazy } from "react";
+import { Suspense, lazy, useState } from "react";
+import { AnimatePresence } from "motion/react";
 
 const GlowingWaveBackground = lazy(() => import("@/components/aura/GlowingWaveBackground"));
 
@@ -37,6 +38,15 @@ export const Route = createFileRoute("/")({
 });
 
 function Landing() {
+  const navigate = useNavigate();
+  const [leaving, setLeaving] = useState(false);
+
+  const enter = () => {
+    if (leaving) return;
+    setLeaving(true);
+    window.setTimeout(() => void navigate({ to: "/play" }), 620);
+  };
+
   return (
     <main className="grain-veil relative min-h-screen overflow-hidden bg-charcoal">
       <ClientOnly fallback={<div className="absolute inset-0 bg-charcoal" />}>
@@ -50,8 +60,8 @@ function Landing() {
 
       <motion.div
         initial={{ opacity: 0, scale: 1.03 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 1.2, ease }}
+        animate={leaving ? { opacity: 0, scale: 1.05, filter: "blur(14px)" } : { opacity: 1, scale: 1 }}
+        transition={{ duration: leaving ? 0.6 : 1.2, ease }}
         className="pointer-events-none relative mx-auto flex min-h-screen max-w-5xl flex-col justify-between px-8 py-14"
       >
         <motion.p
@@ -87,12 +97,13 @@ function Landing() {
             transition={{ duration: 0.9, delay: 0.72, ease }}
             className="mt-12 flex items-center gap-8"
           >
-            <Link
-              to="/play"
+            <button
+              type="button"
+              onClick={enter}
               className="pointer-events-auto rounded-full bg-sienna px-12 py-4 text-xs tracking-[0.35em] text-cream uppercase transition-all duration-500 ease-out hover:scale-[1.04] hover:bg-charcoal"
             >
               enter the room
-            </Link>
+            </button>
             <span className="text-[0.68rem] tracking-[0.25em] text-cream/60 uppercase">
               webcam required
             </span>
@@ -110,6 +121,17 @@ function Landing() {
           <p>03 — nothing leaves your device</p>
         </motion.div>
       </motion.div>
+
+      <AnimatePresence>
+        {leaving && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, ease }}
+            className="pointer-events-none fixed inset-0 z-50 bg-greige"
+          />
+        )}
+      </AnimatePresence>
     </main>
   );
 }
