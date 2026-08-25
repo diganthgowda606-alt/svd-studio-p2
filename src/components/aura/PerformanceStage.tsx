@@ -37,9 +37,6 @@ const BRASS = "rgba(226, 214, 190, ";
 const FINGER_TIPS = [4, 8, 12, 16, 20];
 const FINGER_NAMES = ["Thumb", "Index", "Middle", "Ring", "Pinky"];
 
-/** fallback virtual key plane — replaced by calibration */
-const PRESS_Y = DEFAULT_CALIBRATION.pressY;
-
 type CalPhase = "none" | "rest" | "press" | "done";
 const REST_MS = 2600;
 const PRESS_MS = 4200;
@@ -121,6 +118,11 @@ export default function PerformanceStage() {
   useEffect(() => {
     setMasterVolume(volume);
   }, [volume]);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setFlowIn(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   const addRipple = useCallback((x: number, y: number, tone: Ripple["tone"], max = 220) => {
     ripplesRef.current.push({ x, y, r: 4, max, tone });
@@ -537,6 +539,81 @@ export default function PerformanceStage() {
     }
   }, [drawKit]);
 
+  /** exponential smoothing of landmarks — removes tracker jitter before any trigger test */
+  const smoothHands = useCallback((hands: Hand[]) => {
+    const a = calRef.current.smoothing;
+    hands.forEach((hand, i) => {
+      const prev = smoothRef.current[i];
+      if (prev && prev.length === hand.landmarks.length) {
+        hand.landmarks = hand.landmarks.map((p, j) => {
+          const q = prev[j]!;
+          return {
+            x: q.x + (p.x - q.x) * a,
+            y: q.y + (p.y - q.y) * a,
+            z: q.z + (p.z - q.z) * a,
+          };
+        });
+      }
+      smoothRef.current[i] = hand.landmarks.map((p) => ({ ...p }));
+      const thumb = hand.landmarks[4]!;
+      const index = hand.landmarks[8]!;
+      const span = Math.max(Math.hypot(hand.landmarks[0]!.x - hand.landmarks[9]!.x, hand.landmarks[0]!.y - hand.landmarks[9]!.y), 0.001);
+      hand.pinch = Math.hypot(thumb.x - index.x, thumb.y - index.y) / span;
+      hand.pinchPoint = { x: (thumb.x + index.x) / 2, y: (thumb.y + index.y) / 2, z: 0 };
+      hand.palm = hand.landmarks[9]!;
+    });
+    if (hands.length < Object.keys(smoothRef.current).length) {
+      for (const k of Object.keys(smoothRef.current)) {
+        if (Number(k) >= hands.length) delete smoothRef.current[Number(k)];
+      }
+    }
+  }, []);
+
+  const sampleCalibration = useCallback((hands: Hand[]) => {
+    const phase = calPhaseRef.current;
+    const now = performance.now();
+    const elapsed = now - calStartRef.current;
+    const total = phase === "rest" ? REST_MS : PRESS_MS;
+    setCalProgress(Math.min(1, elapsed / total));
+
+    if (hands.length) {
+      const tips = hands.flatMap((h) => FINGER_TIPS.map((i) => h.landmarks[i]!.y));
+      const meanY = tips.reduce((s, v) => s + v, 0) / tips.length;
+      const maxY = Math.max(...tips);
+      const prevY = calPrevYRef.current;
+      const dy = prevY === null ? 0 : meanY - prevY;
+      calPrevYRef.current = meanY;
+
+      if (phase === "rest") {
+        calSamplesRef.current.restY.push(meanY);
+        calSamplesRef.current.restJitter.push(Math.abs(dy));
+      } else if (phase === "press") {
+        calSamplesRef.current.pressYs.push(maxY);
+        if (dy > 0) calSamplesRef.current.peakVels.push(dy);
+        for (const h of hands) calSamplesRef.current.pinches.push(h.pinch);
+      }
+    }
+
+    if (elapsed < total) return;
+
+    if (phase === "rest") {
+      calPhaseRef.current = "press";
+      calStartRef.current = now;
+      calPrevYRef.current = null;
+      setCalPhase("press");
+      setCalProgress(0);
+      return;
+    }
+
+    const cal = computeCalibration(calSamplesRef.current);
+    calRef.current = cal;
+    saveCalibration(cal);
+    calPhaseRef.current = "done";
+    setCalPhase("done");
+    setCalibrated(true);
+    setStatus("live");
+  }, []);
+
   const loop = useCallback(() => {
     const video = videoRef.current;
     const landmarker = landmarkerRef.current;
@@ -547,20 +624,26 @@ export default function PerformanceStage() {
           (res.landmarks ?? []) as never,
           (res.handedness ?? []) as never,
         );
+        smoothHands(hands);
         handsRef.current = hands;
         setHandsSeen(hands.length);
         const canvas = canvasRef.current;
-        if (canvas) analyse(hands, canvas.width, canvas.height);
+        if (canvas) {
+          const phase = calPhaseRef.current;
+          if (phase === "rest" || phase === "press") sampleCalibration(hands);
+          else analyse(hands, canvas.width, canvas.height);
+        }
       } catch {
         /* frame skipped */
       }
     }
     draw();
     rafRef.current = requestAnimationFrame(loop);
-  }, [analyse, draw]);
+  }, [analyse, draw, sampleCalibration, smoothHands]);
 
-  const begin = useCallback(async () => {
+  const begin = useCallback(async (recalibrate = false) => {
     setStatus("waking the room…");
+    setCalProgress(0);
     try {
       await startAudio();
       setMasterVolume(volume);
@@ -580,7 +663,24 @@ export default function PerformanceStage() {
       setStatus("listening for hands…");
       landmarkerRef.current = await createHandLandmarker();
       setRunning(true);
-      setStatus("live");
+
+      const saved = loadCalibration();
+      if (saved && !recalibrate) {
+        calRef.current = saved;
+        calPhaseRef.current = "done";
+        setCalPhase("done");
+        setCalibrated(true);
+        setStatus("live");
+      } else {
+        calSamplesRef.current = emptySamples();
+        calPrevYRef.current = null;
+        calStartRef.current = performance.now();
+        calPhaseRef.current = "rest";
+        setCalPhase("rest");
+        setCalProgress(0);
+        setCalibrated(false);
+        setStatus("calibrating…");
+      }
       rafRef.current = requestAnimationFrame(loop);
     } catch (err) {
       console.error(err);
