@@ -66,6 +66,20 @@ const CONNECTIONS: [number, number][] = [
 ];
 
 type HandMotion = { y: number; vy: number; lastStrike: number };
+type TipMotion = { y: number; vy: number };
+
+/** gesture timing constants (ms) — debounce windows keep triggers from chattering */
+const FINGER_REFRACTORY = 110; // same finger can't retrigger faster than this
+const KEY_REFRACTORY = 70; // same note can't retrigger faster than this
+const STRING_REFRACTORY = 190;
+const PIECE_REFRACTORY = 95; // same drum/cymbal
+const HAND_REFRACTORY = 105; // same hand
+/** velocity smoothing factor per 16.7ms frame (higher = snappier, noisier) */
+const VEL_SMOOTH = 0.45;
+
+/** frame-rate independent exponential blend */
+const blend = (a: number, dt: number) => 1 - Math.pow(1 - a, Math.min(3, dt / 16.667));
+
 
 export default function PerformanceStage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
