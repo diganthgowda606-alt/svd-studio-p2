@@ -206,11 +206,11 @@ export default function GlowingWaveBackground() {
           const dy = Math.abs(yAtSurge - surge.y);
           surgeBoost += Math.max(0, 1 - dy / 60) * surge.life * surge.strength;
         }
-        surgeBoost = Math.min(surgeBoost, 1.6);
+        surgeBoost = Math.min(surgeBoost, 0.9);
 
-        ctx.strokeStyle = surgeBoost > 0.5 ? HIGHLIGHT : GLOW;
-        ctx.globalAlpha = Math.min(1, thread.alpha + surgeBoost * 0.5);
-        ctx.lineWidth = 0.6 + thread.widthJit * 1.1 + surgeBoost * 1.4;
+        ctx.strokeStyle = surgeBoost > 0.7 ? HIGHLIGHT : GLOW;
+        ctx.globalAlpha = Math.min(1, thread.alpha + surgeBoost * 0.35);
+        ctx.lineWidth = 0.6 + thread.widthJit * 1.1 + surgeBoost * 0.9;
         ctx.shadowColor = GLOW;
         ctx.shadowBlur = 8 + surgeBoost * 20;
         ctx.stroke();
@@ -222,7 +222,7 @@ export default function GlowingWaveBackground() {
 
       if (!prefersReducedMotion) {
         for (let i = surges.length - 1; i >= 0; i--) {
-          surges[i]!.life *= 0.92;
+          surges[i]!.life *= 0.86;
           if (surges[i]!.life < 0.03) surges.splice(i, 1);
         }
       }
