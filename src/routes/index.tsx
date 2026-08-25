@@ -25,11 +25,15 @@ export const Route = createFileRoute("/")({
 
 function Landing() {
   return (
-    <main className="grain-veil relative min-h-screen overflow-hidden bg-greige">
-      <div className="pointer-events-none absolute -top-40 -right-32 h-[38rem] w-[38rem] rounded-full bg-walnut/25 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-56 -left-24 h-[34rem] w-[34rem] rounded-full bg-sienna/20 blur-3xl" />
+    <main className="grain-veil relative min-h-screen overflow-hidden bg-charcoal">
+      <ClientOnly>
+        <GlowingWaveBackground />
+      </ClientOnly>
+      <div className="pointer-events-none absolute -top-40 -right-32 h-[38rem] w-[38rem] rounded-full bg-walnut/20 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-56 -left-24 h-[34rem] w-[34rem] rounded-full bg-sienna/15 blur-3xl" />
 
       <div className="relative mx-auto flex min-h-screen max-w-5xl flex-col justify-between px-8 py-14">
+
         <motion.p
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
