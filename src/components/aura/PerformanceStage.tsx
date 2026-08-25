@@ -122,12 +122,21 @@ export default function PerformanceStage() {
   const fingerLatchRef = useRef<Record<string, boolean>>({});
   const activeKeysRef = useRef<Set<number>>(new Set());
   const pressedTipsRef = useRef<{ x: number; y: number }[]>([]);
+  const tipMotionRef = useRef<Record<string, TipMotion>>({});
+  const fingerLastTrigRef = useRef<Record<string, number>>({});
+  const keyLastTrigRef = useRef<Record<number, number>>({});
+
+  // guitar strum velocity
+  const strumMotionRef = useRef<{ x: number; y: number; v: number } | null>(null);
 
   // drums
   const handMotionRef = useRef<Record<number, HandMotion>>({});
+  const pieceLastHitRef = useRef<Record<string, number>>({});
   const pieceGlowRef = useRef<Record<string, number>>({});
   const kickGlowRef = useRef(0);
   const lastKickRef = useRef(0);
+  const lastFrameRef = useRef(0);
+
 
   useEffect(() => {
     setMasterVolume(volume);
