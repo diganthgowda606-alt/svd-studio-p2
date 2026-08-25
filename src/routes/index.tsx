@@ -60,7 +60,6 @@ function Landing() {
 
       <motion.div
         initial={{ opacity: 0, scale: 1.03 }}
-        animate={{ opacity: 1, scale: 1 }}
         animate={leaving ? { opacity: 0, scale: 1.05, filter: "blur(14px)" } : { opacity: 1, scale: 1 }}
         transition={{ duration: leaving ? 0.6 : 1.2, ease }}
         className="pointer-events-none relative mx-auto flex min-h-screen max-w-5xl flex-col justify-between px-8 py-14"
