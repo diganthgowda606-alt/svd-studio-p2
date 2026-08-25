@@ -112,7 +112,4 @@ function Landing() {
       </motion.div>
     </main>
   );
-
-    </main>
-  );
 }
