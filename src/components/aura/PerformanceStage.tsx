@@ -641,6 +641,17 @@ export default function PerformanceStage() {
     rafRef.current = requestAnimationFrame(loop);
   }, [analyse, draw, sampleCalibration, smoothHands]);
 
+  const startCalibration = useCallback(() => {
+    calSamplesRef.current = emptySamples();
+    calPrevYRef.current = null;
+    calStartRef.current = performance.now();
+    calPhaseRef.current = "rest";
+    setCalPhase("rest");
+    setCalProgress(0);
+    setCalibrated(false);
+    setStatus("calibrating…");
+  }, []);
+
   const begin = useCallback(async (recalibrate = false) => {
     setStatus("waking the room…");
     setCalProgress(0);
@@ -672,21 +683,14 @@ export default function PerformanceStage() {
         setCalibrated(true);
         setStatus("live");
       } else {
-        calSamplesRef.current = emptySamples();
-        calPrevYRef.current = null;
-        calStartRef.current = performance.now();
-        calPhaseRef.current = "rest";
-        setCalPhase("rest");
-        setCalProgress(0);
-        setCalibrated(false);
-        setStatus("calibrating…");
+        startCalibration();
       }
       rafRef.current = requestAnimationFrame(loop);
     } catch (err) {
       console.error(err);
       setStatus("camera unavailable — allow webcam access and try again");
     }
-  }, [loop, volume]);
+  }, [loop, startCalibration, volume]);
 
   useEffect(() => {
     return () => {
@@ -697,8 +701,19 @@ export default function PerformanceStage() {
     };
   }, []);
 
+  const calibrating = calPhase === "rest" || calPhase === "press";
+
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 pb-20 pt-10">
+    <motion.div
+      initial={{ opacity: 0, y: 28, scale: 0.985, filter: "blur(12px)" }}
+      animate={
+        flowIn
+          ? { opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }
+          : { opacity: 0, y: 28, scale: 0.985, filter: "blur(12px)" }
+      }
+      transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+      className="mx-auto w-full max-w-6xl px-6 pb-20 pt-10"
+    >
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-4xl tracking-[0.18em] text-cream uppercase">Aura Harmony</h1>
@@ -741,11 +756,43 @@ export default function PerformanceStage() {
                     tracked. Nothing leaves your device.
                   </p>
                   <button
-                    onClick={begin}
+                    onClick={() => begin(false)}
                     className="rounded-full bg-sienna px-10 py-3 text-sm tracking-[0.3em] text-cream uppercase transition-all duration-500 hover:scale-105 hover:bg-charcoal"
                   >
                     start
                   </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {calibrating && (
+                <motion.div
+                  key={calPhase}
+                  initial={{ opacity: 0, filter: "blur(8px)" }}
+                  animate={{ opacity: 1, filter: "blur(0px)" }}
+                  exit={{ opacity: 0, filter: "blur(8px)" }}
+                  transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-greige-deep/80 px-8 text-center backdrop-blur-[2px]"
+                >
+                  <p className="text-[0.7rem] tracking-[0.4em] text-cream/70 uppercase">
+                    calibration · step {calPhase === "rest" ? 1 : 2} of 2
+                  </p>
+                  <p className="max-w-sm text-sm leading-relaxed tracking-wide text-cream/85">
+                    {calPhase === "rest"
+                      ? "Hold both hands still and relaxed in front of the camera — we're measuring your resting position and tracker noise."
+                      : "Now press down and lift a few times, as if tapping keys or striking a drum, at your natural speed."}
+                  </p>
+                  <div className="h-[3px] w-56 overflow-hidden rounded-full bg-cream/20">
+                    <motion.div
+                      className="h-full bg-sienna"
+                      animate={{ width: `${Math.round(calProgress * 100)}%` }}
+                      transition={{ duration: 0.2, ease: "linear" }}
+                    />
+                  </div>
+                  <p className="text-[0.65rem] tracking-[0.3em] text-cream/55 uppercase">
+                    {handsSeen ? `${handsSeen} hand${handsSeen === 1 ? "" : "s"} detected` : "show your hands"}
+                  </p>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -778,6 +825,22 @@ export default function PerformanceStage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[0.7rem] tracking-[0.3em] text-cream/70 uppercase">Gestures</p>
+              <span className="text-[0.6rem] tracking-[0.2em] text-cream/50 uppercase">
+                {calibrated ? "calibrated" : calibrating ? "measuring" : "default"}
+              </span>
+            </div>
+            <button
+              onClick={() => (running ? startCalibration() : begin(true))}
+              disabled={calibrating}
+              className="w-full rounded-full border border-cream/25 px-4 py-2 text-[0.65rem] tracking-[0.25em] text-cream/80 uppercase transition-all duration-500 hover:bg-charcoal hover:text-cream disabled:opacity-40"
+            >
+              recalibrate
+            </button>
           </div>
 
           <div>
@@ -882,6 +945,6 @@ export default function PerformanceStage() {
       </section>
 
       {!isAudioStarted() && null}
-    </div>
+    </motion.div>
   );
 }
