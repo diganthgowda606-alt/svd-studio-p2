@@ -1,5 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { ClientOnly } from "@tanstack/react-router";
 import { motion } from "motion/react";
+import { lazy } from "react";
+
+const GlowingWaveBackground = lazy(() => import("@/components/aura/GlowingWaveBackground"));
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -25,11 +30,16 @@ export const Route = createFileRoute("/")({
 
 function Landing() {
   return (
-    <main className="grain-veil relative min-h-screen overflow-hidden bg-greige">
-      <div className="pointer-events-none absolute -top-40 -right-32 h-[38rem] w-[38rem] rounded-full bg-walnut/25 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-56 -left-24 h-[34rem] w-[34rem] rounded-full bg-sienna/20 blur-3xl" />
+    <main className="grain-veil relative min-h-screen overflow-hidden bg-charcoal">
+      <ClientOnly>
+        <GlowingWaveBackground />
+      </ClientOnly>
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-charcoal/85 via-charcoal/45 to-transparent" />
+      <div className="pointer-events-none absolute -top-40 -right-32 h-[38rem] w-[38rem] rounded-full bg-walnut/20 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-56 -left-24 h-[34rem] w-[34rem] rounded-full bg-sienna/15 blur-3xl" />
 
-      <div className="relative mx-auto flex min-h-screen max-w-5xl flex-col justify-between px-8 py-14">
+      <div className="pointer-events-none relative mx-auto flex min-h-screen max-w-5xl flex-col justify-between px-8 py-14">
+
         <motion.p
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -69,7 +79,7 @@ function Landing() {
           >
             <Link
               to="/play"
-              className="rounded-full bg-sienna px-12 py-4 text-xs tracking-[0.35em] text-cream uppercase transition-all duration-500 hover:scale-[1.04] hover:bg-charcoal"
+              className="pointer-events-auto rounded-full bg-sienna px-12 py-4 text-xs tracking-[0.35em] text-cream uppercase transition-all duration-500 hover:scale-[1.04] hover:bg-charcoal"
             >
               enter the room
             </Link>
