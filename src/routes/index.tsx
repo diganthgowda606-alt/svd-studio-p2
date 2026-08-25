@@ -1,9 +1,17 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ClientOnly } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { lazy } from "react";
+import { Suspense, lazy } from "react";
 
 const GlowingWaveBackground = lazy(() => import("@/components/aura/GlowingWaveBackground"));
+
+const ease = [0.22, 1, 0.36, 1] as const;
+const rise = (delay: number) => ({
+  initial: { opacity: 0, y: 26, filter: "blur(10px)" },
+  animate: { opacity: 1, y: 0, filter: "blur(0px)" },
+  transition: { duration: 1.1, delay, ease },
+});
+
 
 
 export const Route = createFileRoute("/")({
