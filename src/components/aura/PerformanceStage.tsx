@@ -16,6 +16,15 @@ import {
 } from "@/lib/aura/audio";
 import { DRUM_KIT, pieceAt, type DrumPiece } from "@/lib/aura/drumKit";
 import { buildHands, createHandLandmarker, type Hand } from "@/lib/aura/handTracking";
+import {
+  DEFAULT_CALIBRATION,
+  computeCalibration,
+  emptySamples,
+  loadCalibration,
+  saveCalibration,
+  type Calibration,
+  type CalibrationSamples,
+} from "@/lib/aura/calibration";
 
 type Ripple = { x: number; y: number; r: number; max: number; tone: "sienna" | "charcoal" | "cream" };
 
@@ -28,9 +37,12 @@ const BRASS = "rgba(226, 214, 190, ";
 const FINGER_TIPS = [4, 8, 12, 16, 20];
 const FINGER_NAMES = ["Thumb", "Index", "Middle", "Ring", "Pinky"];
 
-/** virtual key plane — a fingertip below this line is "pressing" */
-const PRESS_Y = 0.66;
-const RELEASE_Y = 0.6;
+/** fallback virtual key plane — replaced by calibration */
+const PRESS_Y = DEFAULT_CALIBRATION.pressY;
+
+type CalPhase = "none" | "rest" | "press" | "done";
+const REST_MS = 2600;
+const PRESS_MS = 4200;
 
 const CONNECTIONS: [number, number][] = [
   [0, 1],
@@ -72,6 +84,17 @@ export default function PerformanceStage() {
   const [handsSeen, setHandsSeen] = useState(0);
   const [fingersTracked, setFingersTracked] = useState(0);
   const [lastHit, setLastHit] = useState<string | null>(null);
+  const [calPhase, setCalPhase] = useState<CalPhase>("none");
+  const [calProgress, setCalProgress] = useState(0);
+  const [calibrated, setCalibrated] = useState(false);
+  const [flowIn, setFlowIn] = useState(false);
+
+  const calRef = useRef<Calibration>(DEFAULT_CALIBRATION);
+  const calPhaseRef = useRef<CalPhase>("none");
+  const calStartRef = useRef(0);
+  const calSamplesRef = useRef<CalibrationSamples>(emptySamples());
+  const calPrevYRef = useRef<number | null>(null);
+  const smoothRef = useRef<Record<number, { x: number; y: number; z: number }[]>>({});
 
   const instrumentRef = useRef(instrument);
   instrumentRef.current = instrument;
@@ -171,11 +194,11 @@ export default function PerformanceStage() {
           );
           const latched = fingerLatchRef.current[key] ?? false;
 
-          if (!latched && tip.y > PRESS_Y) {
+          if (!latched && tip.y > calRef.current.pressY) {
             fingerLatchRef.current[key] = true;
-            const depth = Math.min(1, (tip.y - PRESS_Y) / 0.2);
+            const depth = Math.min(1, (tip.y - calRef.current.pressY) / 0.2);
             triggerPiano(idx, dx * w, tip.y * h, 0.45 + depth * 0.5);
-          } else if (latched && tip.y < RELEASE_Y) {
+          } else if (latched && tip.y < calRef.current.releaseY) {
             fingerLatchRef.current[key] = false;
             releasePiano(idx);
           }
@@ -208,7 +231,7 @@ export default function PerformanceStage() {
       const fretHand = sorted.length > 1 ? sorted[0] : undefined;
       const strumHand = sorted.length > 1 ? sorted[1] : sorted[0];
       if (fretHand) {
-        const pinched = fretHand.pinch < 0.5;
+        const pinched = fretHand.pinch < calRef.current.pinchThreshold;
         fretRef.current = pinched
           ? Math.round((1 - Math.min(Math.max(fretHand.palm.y, 0.1), 0.9)) * 7)
           : 0;
@@ -253,7 +276,7 @@ export default function PerformanceStage() {
         const prev = handMotionRef.current[hi] ?? { y, vy: 0, lastStrike: 0 };
         const vy = y - prev.y;
         // accelerating downward then reversing = strike
-        const reversed = prev.vy > 0.014 && vy < prev.vy * 0.45;
+        const reversed = prev.vy > calRef.current.strikeVel && vy < prev.vy * 0.45;
         if (reversed && now - prev.lastStrike > 110) {
           strikes.push({ x, y, velocity: Math.min(1, 0.35 + prev.vy * 16) });
           handMotionRef.current[hi] = { y, vy, lastStrike: now };
@@ -401,7 +424,7 @@ export default function PerformanceStage() {
 
     if (instrumentRef.current === "piano") {
       // key plane
-      const planeY = PRESS_Y * h;
+      const planeY = calRef.current.pressY * h;
       ctx.strokeStyle = CREAM + "0.4)";
       ctx.setLineDash([6, 8]);
       ctx.lineWidth = 1.2;
