@@ -201,9 +201,14 @@ export default function PerformanceStage() {
   /* ---------------- gesture analysis ---------------- */
 
   const analysePiano = useCallback(
-    (hands: Hand[], w: number, h: number) => {
+    (hands: Hand[], w: number, h: number, dt: number) => {
+      const now = performance.now();
+      const k = blend(VEL_SMOOTH, dt);
       const pressed: { x: number; y: number }[] = [];
       const stillDown = new Set<number>();
+      const seen = new Set<string>();
+      // chord bucket: notes crossing the plane in this frame fire together
+      const chord = new Map<number, { x: number; y: number; velocity: number }>();
       let tips = 0;
 
       hands.forEach((hand, hi) => {
@@ -213,16 +218,35 @@ export default function PerformanceStage() {
           tips += 1;
           const dx = 1 - tip.x; // display space (mirrored)
           const key = `${hi}-${fi}`;
+          seen.add(key);
           const idx = Math.min(
             PIANO_NOTES.length - 1,
             Math.max(0, Math.floor(((dx - 0.04) / 0.92) * PIANO_NOTES.length)),
           );
+
+          // smoothed downward velocity (units/frame-equivalent), drives dynamics
+          const prev = tipMotionRef.current[key];
+          const rawV = prev ? ((tip.y - prev.y) * 16.667) / Math.max(1, dt) : 0;
+          const vy = prev ? prev.vy + (rawV - prev.vy) * k : 0;
+          tipMotionRef.current[key] = { y: tip.y, vy };
+
           const latched = fingerLatchRef.current[key] ?? false;
+          const lastFinger = fingerLastTrigRef.current[key] ?? 0;
+          const lastKey = keyLastTrigRef.current[idx] ?? 0;
 
           if (!latched && tip.y > calRef.current.pressY) {
             fingerLatchRef.current[key] = true;
-            const depth = Math.min(1, (tip.y - calRef.current.pressY) / 0.2);
-            triggerPiano(idx, dx * w, tip.y * h, 0.45 + depth * 0.5);
+            if (now - lastFinger > FINGER_REFRACTORY && now - lastKey > KEY_REFRACTORY) {
+              fingerLastTrigRef.current[key] = now;
+              keyLastTrigRef.current[idx] = now;
+              const depth = Math.min(1, (tip.y - calRef.current.pressY) / 0.2);
+              const speed = Math.min(1, Math.max(0, vy) * 22);
+              const velocity = Math.min(1, 0.38 + depth * 0.3 + speed * 0.34);
+              const existing = chord.get(idx);
+              if (!existing || velocity > existing.velocity) {
+                chord.set(idx, { x: dx * w, y: tip.y * h, velocity });
+              }
+            }
           } else if (latched && tip.y < calRef.current.releaseY) {
             fingerLatchRef.current[key] = false;
             releasePiano(idx);
@@ -234,14 +258,25 @@ export default function PerformanceStage() {
         });
       });
 
+      // fire the whole chord in one pass so audio + ripples land on the same frame
+      for (const [idx, n] of chord) triggerPiano(idx, n.x, n.y, n.velocity);
+
+      // drop motion state for fingers that left the frame (prevents ghost velocity spikes)
+      for (const key of Object.keys(tipMotionRef.current)) {
+        if (!seen.has(key)) {
+          delete tipMotionRef.current[key];
+          delete fingerLatchRef.current[key];
+        }
+      }
+
       setFingersTracked(tips);
       pressedTipsRef.current = pressed;
 
       // clean up keys whose finger left the frame
       let changed = false;
-      for (const k of [...activeKeysRef.current]) {
-        if (!stillDown.has(k)) {
-          activeKeysRef.current.delete(k);
+      for (const kk of [...activeKeysRef.current]) {
+        if (!stillDown.has(kk)) {
+          activeKeysRef.current.delete(kk);
           changed = true;
         }
       }
@@ -251,7 +286,7 @@ export default function PerformanceStage() {
   );
 
   const analyseGuitar = useCallback(
-    (hands: Hand[], w: number, h: number) => {
+    (hands: Hand[], w: number, h: number, dt: number) => {
       const sorted = [...hands].sort((a, b) => a.palm.x - b.palm.x);
       const fretHand = sorted.length > 1 ? sorted[0] : undefined;
       const strumHand = sorted.length > 1 ? sorted[1] : sorted[0];
@@ -263,18 +298,31 @@ export default function PerformanceStage() {
       } else {
         fretRef.current = 0;
       }
-      if (!strumHand) return;
+      if (!strumHand) {
+        strumMotionRef.current = null;
+        return;
+      }
       const tip = strumHand.landmarks[8] ?? strumHand.palm;
       const y = tip.y;
       const x = 1 - tip.x;
       const now = performance.now();
+
+      // smoothed strum speed -> pluck dynamics instead of a random value
+      const prevS = strumMotionRef.current;
+      const kk = blend(VEL_SMOOTH, dt);
+      const rawSpeed = prevS
+        ? (Math.hypot(x - prevS.x, y - prevS.y) * 16.667) / Math.max(1, dt)
+        : 0;
+      const speed = prevS ? prevS.v + (rawSpeed - prevS.v) * kk : 0;
+      strumMotionRef.current = { x, y, v: speed };
+
       GUITAR_STRINGS.forEach((_, i) => {
         const lineY = 0.24 + (i * 0.52) / (GUITAR_STRINGS.length - 1);
         if (Math.abs(y - lineY) < 0.028) {
           const last = stringLatchRef.current[i] ?? 0;
-          if (now - last > 220) {
+          if (now - last > STRING_REFRACTORY) {
             stringLatchRef.current[i] = now;
-            triggerString(i, x * w, lineY * h, 0.6 + Math.random() * 0.3);
+            triggerString(i, x * w, lineY * h, Math.min(1, 0.45 + speed * 18));
           }
         }
       });
@@ -283,9 +331,10 @@ export default function PerformanceStage() {
   );
 
   const analyseDrums = useCallback(
-    (hands: Hand[], w: number, h: number) => {
+    (hands: Hand[], w: number, h: number, dt: number) => {
       const now = performance.now();
-      const strikes: { x: number; y: number; velocity: number }[] = [];
+      const k = blend(VEL_SMOOTH, dt);
+      const strikes: { x: number; y: number; velocity: number; hand: number }[] = [];
 
       hands.forEach((hand, hi) => {
         // mean of the whole landmark cluster = stable hand vector
@@ -299,29 +348,27 @@ export default function PerformanceStage() {
         const x = sx / Math.max(1, hand.landmarks.length);
 
         const prev = handMotionRef.current[hi] ?? { y, vy: 0, lastStrike: 0 };
-        const vy = y - prev.y;
+        const rawVy = ((y - prev.y) * 16.667) / Math.max(1, dt);
+        const vy = prev.vy + (rawVy - prev.vy) * k;
         // accelerating downward then reversing = strike
         const reversed = prev.vy > calRef.current.strikeVel && vy < prev.vy * 0.45;
-        if (reversed && now - prev.lastStrike > 110) {
-          strikes.push({ x, y, velocity: Math.min(1, 0.35 + prev.vy * 16) });
-          handMotionRef.current[hi] = { y, vy, lastStrike: now };
+        if (reversed && now - prev.lastStrike > HAND_REFRACTORY) {
+          strikes.push({ x, y, velocity: Math.min(1, 0.35 + prev.vy * 16), hand: hi });
+          handMotionRef.current[hi] = { y, vy: 0, lastStrike: now };
         } else {
           handMotionRef.current[hi] = { y, vy, lastStrike: prev.lastStrike };
         }
       });
 
       // both hands pumping together -> double kick
-      if (strikes.length === 2 && now - lastKickRef.current > 90) {
+      if (strikes.length === 2 && now - lastKickRef.current > 200) {
         const avgLow = (strikes[0]!.y + strikes[1]!.y) / 2;
         if (avgLow > 0.55) {
           lastKickRef.current = now;
           kickGlowRef.current = 1;
           const kicks = DRUM_KIT.filter((p) => p.kind === "kick");
-          kicks.forEach((k, i) =>
-            window.setTimeout(
-              () => strikePiece(k, 0.95, w, h),
-              i * 45,
-            ),
+          kicks.forEach((kp, i) =>
+            window.setTimeout(() => strikePiece(kp, 0.95, w, h), i * 45),
           );
           return;
         }
@@ -329,11 +376,16 @@ export default function PerformanceStage() {
 
       for (const s of strikes) {
         const piece = pieceAt(s.x, s.y);
-        if (piece) strikePiece(piece, s.velocity, w, h);
+        if (!piece) continue;
+        const lastHit = pieceLastHitRef.current[piece.id] ?? 0;
+        if (now - lastHit < PIECE_REFRACTORY) continue;
+        pieceLastHitRef.current[piece.id] = now;
+        strikePiece(piece, s.velocity, w, h);
       }
     },
     [strikePiece],
   );
+
 
   const analyse = useCallback(
     (hands: Hand[], w: number, h: number) => {
