@@ -1,5 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { ClientOnly } from "@tanstack/react-router";
 import { motion } from "motion/react";
+import { lazy } from "react";
+
+const GlowingWaveBackground = lazy(() => import("@/components/aura/GlowingWaveBackground"));
+
 
 export const Route = createFileRoute("/")({
   head: () => ({
