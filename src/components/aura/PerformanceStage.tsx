@@ -1141,6 +1141,7 @@ export default function PerformanceStage() {
                   ["piano", "Minimalist Grand"],
                   ["guitar", "Acoustic"],
                   ["drums", "Infernal Pulse"],
+                  ["chords", "Aura Chords"],
                 ] as [InstrumentKind, string][]
               ).map(([kind, label]) => (
                 <button
@@ -1184,6 +1185,21 @@ export default function PerformanceStage() {
             />
           </div>
 
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[0.7rem] tracking-[0.3em] text-cream/70 uppercase">Tone</p>
+              <span className="text-[0.6rem] tracking-[0.2em] text-cream/50 uppercase">
+                {toneColor < 0.34 ? "warm" : toneColor > 0.66 ? "bright" : "balanced"}
+              </span>
+            </div>
+            <Slider
+              value={[toneColor * 100]}
+              max={100}
+              step={1}
+              onValueChange={(v) => setToneColorState((v[0] ?? 50) / 100)}
+            />
+          </div>
+
           <div className="space-y-2 text-xs leading-relaxed tracking-wide text-cream/75">
             <p className="text-[0.7rem] tracking-[0.3em] text-cream/60 uppercase">Gesture</p>
             {instrument === "piano" ? (
@@ -1196,10 +1212,15 @@ export default function PerformanceStage() {
                 Pinch with your left hand and move it vertically to fret. Sweep your right hand
                 across the strings to strum.
               </p>
-            ) : (
+            ) : instrument === "drums" ? (
               <p>
                 Hover a hand over a drum or cymbal and make a sharp downward strike. Pump both
                 hands down together low in the frame to fire the double kicks.
+              </p>
+            ) : (
+              <p>
+                Hold up one to five fingers to choose a chord, then tilt your hand clockwise past
+                18° to bend it minor and back upright for major. Tone shapes the pad's colour.
               </p>
             )}
           </div>
@@ -1207,7 +1228,11 @@ export default function PerformanceStage() {
           <div className="mt-auto">
             <p className="text-[0.7rem] tracking-[0.3em] text-cream/60 uppercase">Now sounding</p>
             <p className="font-display text-4xl text-cream">
-              {instrument === "drums" ? (lastHit ?? "—") : (activeNote ?? "—")}
+              {instrument === "drums"
+                ? (lastHit ?? "—")
+                : instrument === "chords"
+                  ? (chordState.label ?? "—")
+                  : (activeNote ?? "—")}
             </p>
           </div>
         </aside>
