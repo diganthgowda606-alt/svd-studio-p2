@@ -71,6 +71,15 @@ export async function startAudio() {
   }).connect(reverb);
   guitar.volume.value = -2;
 
+  // Chord pad: sustained, filtered voice steered by the tone control
+  padFilter = new Tone.Filter({ type: "lowpass", frequency: 1400, Q: 0.8 }).connect(reverb);
+  pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sawtooth" },
+    envelope: { attack: 0.28, decay: 0.6, sustain: 0.75, release: 1.4 },
+  }).connect(padFilter);
+  pad.maxPolyphony = 12;
+  pad.volume.value = -14;
+
   // Drum bus: tight, punchy, minimal reverb for metal articulation
   const drumRoom = new Tone.Reverb({ decay: 1.4, wet: 0.12 }).connect(volumeNode);
   const punch = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(
