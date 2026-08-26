@@ -630,7 +630,80 @@ export default function PerformanceStage() {
         ctx.stroke();
       }
     }
+
+    // ---- calibration diagnostics: press plane + hysteresis gap ----
+    const calPhase = calPhaseRef.current;
+    const diag = calDiagRef.current;
+    if ((calPhase === "rest" || calPhase === "press") && diag) {
+      const pressPx = diag.pressY * h;
+      const releasePx = diag.releaseY * h;
+      const x0 = w * 0.06;
+      const x1 = w * 0.94;
+
+      // hysteresis band
+      ctx.fillStyle = SIENNA + "0.16)";
+      ctx.fillRect(x0, releasePx, x1 - x0, Math.max(1, pressPx - releasePx));
+
+      // release plane (dashed cream)
+      ctx.setLineDash([4, 7]);
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = CREAM + "0.55)";
+      ctx.beginPath();
+      ctx.moveTo(x0, releasePx);
+      ctx.lineTo(x1, releasePx);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // press plane (solid sienna)
+      ctx.strokeStyle = SIENNA + "0.95)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x0, pressPx);
+      ctx.lineTo(x1, pressPx);
+      ctx.stroke();
+
+      ctx.font = `${Math.max(9, w * 0.0095)}px system-ui`;
+      ctx.textAlign = "left";
+      ctx.fillStyle = CREAM + "0.8)";
+      ctx.fillText("RELEASE", x0 + 4, releasePx - 5);
+      ctx.fillStyle = SIENNA + "1)";
+      ctx.fillText("PRESS PLANE", x0 + 4, pressPx + 13);
+      ctx.textAlign = "right";
+      ctx.fillStyle = CREAM + "0.7)";
+      ctx.fillText(
+        `GAP ${(diag.pressY - diag.releaseY).toFixed(3)}`,
+        x1 - 4,
+        (pressPx + releasePx) / 2 + 3,
+      );
+
+      // live fingertip depth marker
+      if (diag.deepestY !== null) {
+        const y = diag.deepestY * h;
+        const below = diag.deepestY > diag.pressY;
+        ctx.strokeStyle = below ? SIENNA + "0.9)" : CREAM + "0.45)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x0, y);
+        ctx.lineTo(x1, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      if (diag.restY > 0) {
+        const y = diag.restY * h;
+        ctx.strokeStyle = CHARCOAL + "0.7)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x0, y);
+        ctx.lineTo(x1, y);
+        ctx.stroke();
+        ctx.textAlign = "left";
+        ctx.fillStyle = CREAM + "0.55)";
+        ctx.fillText("REST", x0 + 4, y - 4);
+      }
+    }
   }, [drawKit]);
+
 
   /** exponential smoothing of landmarks — removes tracker jitter before any trigger test */
   const smoothHands = useCallback((hands: Hand[]) => {
