@@ -126,6 +126,16 @@ export default function PerformanceStage() {
   const [calibrated, setCalibrated] = useState(false);
   const [flowIn, setFlowIn] = useState(false);
   const [calDiag, setCalDiag] = useState<CalDiag | null>(null);
+  const [toneColor, setToneColorState] = useState(0.5);
+  const [chordState, setChordState] = useState<{
+    fingers: number;
+    quality: ChordQuality;
+    tilt: number;
+    label: string | null;
+  }>({ fingers: 0, quality: "major", tilt: 0, label: null });
+
+  const chordKeyRef = useRef<string>("");
+  const chordGlowRef = useRef(0);
 
   const calRef = useRef<Calibration>(DEFAULT_CALIBRATION);
   const calPhaseRef = useRef<CalPhase>("none");
