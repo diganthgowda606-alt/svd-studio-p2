@@ -8,6 +8,9 @@ import {
   pluckGuitar,
   playPiano,
   playDrum,
+  playChord,
+  stopChord,
+  setToneColor,
   setMasterVolume,
   startAudio,
   transpose,
@@ -15,6 +18,16 @@ import {
   type InstrumentKind,
 } from "@/lib/aura/audio";
 import { DRUM_KIT, pieceAt, type DrumPiece } from "@/lib/aura/drumKit";
+import {
+  CHORD_DEGREE_LABELS,
+  CHORD_ROOTS,
+  chordLabel,
+  chordNotes,
+  countFingers,
+  handTilt,
+  qualityFromTilt,
+  type ChordQuality,
+} from "@/lib/aura/chords";
 import { buildHands, createHandLandmarker, type Hand } from "@/lib/aura/handTracking";
 import {
   DEFAULT_CALIBRATION,
@@ -113,6 +126,17 @@ export default function PerformanceStage() {
   const [calibrated, setCalibrated] = useState(false);
   const [flowIn, setFlowIn] = useState(false);
   const [calDiag, setCalDiag] = useState<CalDiag | null>(null);
+  const [toneColor, setToneColorState] = useState(0.5);
+  const [chordState, setChordState] = useState<{
+    fingers: number;
+    quality: ChordQuality;
+    tilt: number;
+    label: string | null;
+  }>({ fingers: 0, quality: "major", tilt: 0, label: null });
+
+  const chordKeyRef = useRef<string>("");
+  const chordZoneRef = useRef(-1);
+  const chordGlowRef = useRef(0);
 
   const calRef = useRef<Calibration>(DEFAULT_CALIBRATION);
   const calPhaseRef = useRef<CalPhase>("none");
@@ -158,6 +182,19 @@ export default function PerformanceStage() {
   useEffect(() => {
     setMasterVolume(volume);
   }, [volume]);
+
+  useEffect(() => {
+    setToneColor(toneColor);
+  }, [toneColor]);
+
+  // release any sustained chord when leaving chord mode
+  useEffect(() => {
+    if (instrument !== "chords") {
+      stopChord();
+      chordKeyRef.current = "";
+      setChordState((s) => ({ ...s, label: null }));
+    }
+  }, [instrument]);
 
   useEffect(() => {
     const id = requestAnimationFrame(() => setFlowIn(true));
@@ -403,14 +440,60 @@ export default function PerformanceStage() {
     [strikePiece],
   );
 
+  /** finger count picks the chord root, hand tilt picks major / minor */
+  const analyseChords = useCallback(
+    (hands: Hand[], w: number, h: number) => {
+      const hand = hands[0];
+      if (!hand) {
+        if (chordKeyRef.current) {
+          stopChord();
+          chordKeyRef.current = "";
+          setChordState({ fingers: 0, quality: "major", tilt: 0, label: null });
+        }
+        setFingersTracked(0);
+        chordZoneRef.current = -1;
+        return;
+      }
+
+      const fingers = countFingers(hand);
+      const tilt = handTilt(hand);
+      const quality = qualityFromTilt(tilt);
+      setFingersTracked(fingers);
+      chordZoneRef.current = fingers >= 1 ? fingers - 1 : -1;
+
+      if (fingers < 1) {
+        if (chordKeyRef.current) {
+          stopChord();
+          chordKeyRef.current = "";
+        }
+        setChordState({ fingers, quality, tilt, label: null });
+        return;
+      }
+
+      const root = CHORD_ROOTS[fingers - 1] ?? "C3";
+      const key = `${root}-${quality}`;
+      const label = chordLabel(root, quality);
+      if (key !== chordKeyRef.current) {
+        chordKeyRef.current = key;
+        playChord(chordNotes(root, quality), 0.55);
+        chordGlowRef.current = 1;
+        setActiveNote(label);
+        const wrist = hand.landmarks[0];
+        if (wrist) addRipple((1 - wrist.x) * w, wrist.y * h, "cream", 260);
+      }
+      setChordState({ fingers, quality, tilt, label });
+    },
+    [addRipple],
+  );
 
   const analyse = useCallback(
     (hands: Hand[], w: number, h: number, dt: number) => {
       if (instrumentRef.current === "piano") analysePiano(hands, w, h, dt);
       else if (instrumentRef.current === "guitar") analyseGuitar(hands, w, h, dt);
+      else if (instrumentRef.current === "chords") analyseChords(hands, w, h);
       else analyseDrums(hands, w, h, dt);
     },
-    [analyseDrums, analyseGuitar, analysePiano],
+    [analyseChords, analyseDrums, analyseGuitar, analysePiano],
   );
 
 
@@ -556,6 +639,25 @@ export default function PerformanceStage() {
         }
         ctx.stroke();
       });
+    } else if (instrumentRef.current === "chords") {
+      // five chord zones + a tilt meter
+      const glow = chordGlowRef.current;
+      chordGlowRef.current = glow * 0.94;
+      const zoneW = (w * 0.9) / CHORD_ROOTS.length;
+      const top = h * 0.72;
+      for (let i = 0; i < CHORD_ROOTS.length; i++) {
+        const x = w * 0.05 + i * zoneW;
+        const on = i === chordZoneRef.current;
+        ctx.fillStyle = on ? SIENNA + (0.35 + glow * 0.4).toFixed(3) + ")" : CREAM + "0.06)";
+        ctx.fillRect(x + 2, top, zoneW - 4, h * 0.2);
+        ctx.strokeStyle = CREAM + (on ? "0.7)" : "0.18)");
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 2, top, zoneW - 4, h * 0.2);
+        ctx.fillStyle = CREAM + (on ? "0.95)" : "0.5)");
+        ctx.font = `${Math.max(10, w * 0.011)}px system-ui`;
+        ctx.textAlign = "center";
+        ctx.fillText(`${i + 1} · ${CHORD_DEGREE_LABELS[i]}`, x + zoneW / 2, top + h * 0.115);
+      }
     } else {
       drawKit(ctx, w, h);
     }
@@ -1039,6 +1141,7 @@ export default function PerformanceStage() {
                   ["piano", "Minimalist Grand"],
                   ["guitar", "Acoustic"],
                   ["drums", "Infernal Pulse"],
+                  ["chords", "Aura Chords"],
                 ] as [InstrumentKind, string][]
               ).map(([kind, label]) => (
                 <button
@@ -1082,6 +1185,21 @@ export default function PerformanceStage() {
             />
           </div>
 
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[0.7rem] tracking-[0.3em] text-cream/70 uppercase">Tone</p>
+              <span className="text-[0.6rem] tracking-[0.2em] text-cream/50 uppercase">
+                {toneColor < 0.34 ? "warm" : toneColor > 0.66 ? "bright" : "balanced"}
+              </span>
+            </div>
+            <Slider
+              value={[toneColor * 100]}
+              max={100}
+              step={1}
+              onValueChange={(v) => setToneColorState((v[0] ?? 50) / 100)}
+            />
+          </div>
+
           <div className="space-y-2 text-xs leading-relaxed tracking-wide text-cream/75">
             <p className="text-[0.7rem] tracking-[0.3em] text-cream/60 uppercase">Gesture</p>
             {instrument === "piano" ? (
@@ -1094,10 +1212,15 @@ export default function PerformanceStage() {
                 Pinch with your left hand and move it vertically to fret. Sweep your right hand
                 across the strings to strum.
               </p>
-            ) : (
+            ) : instrument === "drums" ? (
               <p>
                 Hover a hand over a drum or cymbal and make a sharp downward strike. Pump both
                 hands down together low in the frame to fire the double kicks.
+              </p>
+            ) : (
+              <p>
+                Hold up one to five fingers to choose a chord, then tilt your hand clockwise past
+                18° to bend it minor and back upright for major. Tone shapes the pad's colour.
               </p>
             )}
           </div>
@@ -1105,7 +1228,11 @@ export default function PerformanceStage() {
           <div className="mt-auto">
             <p className="text-[0.7rem] tracking-[0.3em] text-cream/60 uppercase">Now sounding</p>
             <p className="font-display text-4xl text-cream">
-              {instrument === "drums" ? (lastHit ?? "—") : (activeNote ?? "—")}
+              {instrument === "drums"
+                ? (lastHit ?? "—")
+                : instrument === "chords"
+                  ? (chordState.label ?? "—")
+                  : (activeNote ?? "—")}
             </p>
           </div>
         </aside>
@@ -1151,6 +1278,45 @@ export default function PerformanceStage() {
                 className="h-px w-full origin-center bg-cream"
               />
             ))}
+          </div>
+        ) : instrument === "chords" ? (
+          <div className="panel flex flex-col gap-5 rounded-3xl p-6">
+            <div className="grid grid-cols-5 gap-2">
+              {CHORD_ROOTS.map((root, i) => {
+                const active = chordState.fingers === i + 1;
+                return (
+                  <motion.div
+                    key={root}
+                    animate={{ opacity: active ? 1 : 0.6, y: active ? -4 : 0 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 24 }}
+                    className={`rounded-2xl border px-3 py-5 text-center transition-colors duration-300 ${
+                      active
+                        ? "border-cream/60 bg-sienna text-cream"
+                        : "border-cream/20 bg-charcoal/50 text-cream/70"
+                    }`}
+                  >
+                    <p className="font-display text-2xl">
+                      {chordLabel(root, active ? chordState.quality : "major")}
+                    </p>
+                    <p className="mt-1 text-[0.6rem] tracking-[0.25em] uppercase">
+                      {i + 1} finger{i ? "s" : ""} · {CHORD_DEGREE_LABELS[i]}
+                    </p>
+                  </motion.div>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap items-center gap-6 text-[0.65rem] tracking-[0.22em] text-cream/70 uppercase">
+              <span>
+                quality{" "}
+                <span className="text-cream">{chordState.quality}</span>
+              </span>
+              <span>
+                tilt <span className="text-cream">{chordState.tilt.toFixed(0)}°</span>
+              </span>
+              <span>
+                fingers <span className="text-cream">{chordState.fingers}</span>
+              </span>
+            </div>
           </div>
         ) : (
           <div className="panel grid grid-cols-3 gap-2 rounded-3xl p-5 sm:grid-cols-5 lg:grid-cols-8">
