@@ -1,6 +1,6 @@
 import * as Tone from "tone";
 
-export type InstrumentKind = "piano" | "guitar" | "drums";
+export type InstrumentKind = "piano" | "guitar" | "drums" | "chords";
 
 export const PIANO_NOTES = [
   "C3",
@@ -31,6 +31,9 @@ let reverb: Tone.Reverb | null = null;
 let piano: Tone.PolySynth<Tone.Synth> | null = null;
 let guitar: Tone.PluckSynth | null = null;
 let analyser: Tone.Analyser | null = null;
+let pad: Tone.PolySynth<Tone.Synth> | null = null;
+let padFilter: Tone.Filter | null = null;
+let padNotes: string[] = [];
 
 /* ---- Infernal Pulse drum voices ---- */
 type DrumVoices = {
