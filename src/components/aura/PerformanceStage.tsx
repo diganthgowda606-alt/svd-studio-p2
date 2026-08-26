@@ -388,13 +388,14 @@ export default function PerformanceStage() {
 
 
   const analyse = useCallback(
-    (hands: Hand[], w: number, h: number) => {
-      if (instrumentRef.current === "piano") analysePiano(hands, w, h);
-      else if (instrumentRef.current === "guitar") analyseGuitar(hands, w, h);
-      else analyseDrums(hands, w, h);
+    (hands: Hand[], w: number, h: number, dt: number) => {
+      if (instrumentRef.current === "piano") analysePiano(hands, w, h, dt);
+      else if (instrumentRef.current === "guitar") analyseGuitar(hands, w, h, dt);
+      else analyseDrums(hands, w, h, dt);
     },
     [analyseDrums, analyseGuitar, analysePiano],
   );
+
 
   /* ---------------- rendering ---------------- */
 
