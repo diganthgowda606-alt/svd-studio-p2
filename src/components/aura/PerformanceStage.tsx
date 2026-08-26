@@ -1056,7 +1056,7 @@ export default function PerformanceStage() {
                   </p>
                   <button
                     onClick={() => begin(false)}
-                    className="rounded-full bg-sienna px-10 py-3 text-sm tracking-[0.3em] text-cream uppercase transition-all duration-500 hover:scale-105 hover:bg-charcoal"
+                    className="glass-btn glass-btn-accent rounded-full px-10 py-3 text-sm tracking-[0.3em] text-cream uppercase hover:scale-105"
                   >
                     start
                   </button>
@@ -1147,9 +1147,9 @@ export default function PerformanceStage() {
                 <button
                   key={kind}
                   onClick={() => setInstrument(kind)}
-                  className={`rounded-full px-4 py-2 text-xs tracking-[0.2em] uppercase transition-all duration-500 ${
+                  className={`glass-btn rounded-full px-4 py-2 text-xs tracking-[0.2em] uppercase ${
                     instrument === kind
-                      ? "bg-charcoal text-cream"
+                      ? "glass-btn-accent text-cream"
                       : "text-cream/70 hover:text-cream"
                   }`}
                 >
@@ -1169,7 +1169,7 @@ export default function PerformanceStage() {
             <button
               onClick={() => (running ? startCalibration() : begin(true))}
               disabled={calibrating}
-              className="w-full rounded-full border border-cream/25 px-4 py-2 text-[0.65rem] tracking-[0.25em] text-cream/80 uppercase transition-all duration-500 hover:bg-charcoal hover:text-cream disabled:opacity-40"
+              className="glass-btn w-full rounded-full px-4 py-2 text-[0.65rem] tracking-[0.25em] text-cream/80 uppercase hover:text-cream disabled:opacity-40"
             >
               recalibrate
             </button>

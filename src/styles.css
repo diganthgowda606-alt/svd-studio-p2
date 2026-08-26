@@ -202,3 +202,65 @@
   border: 1px solid color-mix(in oklab, var(--cream) 22%, transparent);
   backdrop-filter: blur(8px);
 }
+
+@utility glass {
+  background: color-mix(in oklab, var(--charcoal) 34%, transparent);
+  border: 1px solid color-mix(in oklab, var(--cream) 24%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  box-shadow:
+    0 8px 32px -12px color-mix(in oklab, var(--charcoal) 60%, transparent),
+    inset 0 1px 0 color-mix(in oklab, var(--cream) 22%, transparent);
+}
+
+@utility glass-btn {
+  position: relative;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--charcoal) 28%, transparent);
+  border: 1px solid color-mix(in oklab, var(--cream) 26%, transparent);
+  backdrop-filter: blur(12px) saturate(150%);
+  box-shadow:
+    0 6px 24px -10px color-mix(in oklab, var(--charcoal) 55%, transparent),
+    inset 0 1px 0 color-mix(in oklab, var(--cream) 24%, transparent);
+  transition:
+    background 0.5s ease,
+    box-shadow 0.5s ease,
+    transform 0.5s ease,
+    border-color 0.5s ease;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: -40% -10%;
+    pointer-events: none;
+    background: radial-gradient(
+      circle at 30% 0%,
+      color-mix(in oklab, var(--cream) 30%, transparent),
+      transparent 62%
+    );
+    opacity: 0.5;
+    transition: opacity 0.5s ease;
+  }
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in oklab, var(--charcoal) 42%, transparent);
+    border-color: color-mix(in oklab, var(--cream) 40%, transparent);
+    box-shadow:
+      0 0 26px -4px color-mix(in oklab, var(--sienna) 60%, transparent),
+      inset 0 1px 0 color-mix(in oklab, var(--cream) 34%, transparent);
+    transform: translateY(-1px);
+  }
+  &:hover::before,
+  &:focus-visible::before {
+    opacity: 0.85;
+  }
+  &:active {
+    transform: translateY(0) scale(0.985);
+  }
+}
+
+@utility glass-btn-accent {
+  background: color-mix(in oklab, var(--sienna) 52%, transparent);
+  border-color: color-mix(in oklab, var(--cream) 36%, transparent);
+  box-shadow:
+    0 0 30px -6px color-mix(in oklab, var(--sienna) 70%, transparent),
+    inset 0 1px 0 color-mix(in oklab, var(--cream) 32%, transparent);
+}

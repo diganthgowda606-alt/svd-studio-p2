@@ -100,7 +100,7 @@ function Landing() {
             <button
               type="button"
               onClick={enter}
-              className="pointer-events-auto rounded-full bg-sienna px-12 py-4 text-xs tracking-[0.35em] text-cream uppercase transition-all duration-500 ease-out hover:scale-[1.04] hover:bg-charcoal"
+              className="glass-btn glass-btn-accent pointer-events-auto rounded-full px-12 py-4 text-xs tracking-[0.35em] text-cream uppercase hover:scale-[1.04]"
             >
               enter the room
             </button>
