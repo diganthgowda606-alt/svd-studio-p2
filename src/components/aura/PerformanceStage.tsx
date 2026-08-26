@@ -970,7 +970,7 @@ export default function PerformanceStage() {
                   animate={{ opacity: 1, filter: "blur(0px)" }}
                   exit={{ opacity: 0, filter: "blur(8px)" }}
                   transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-greige-deep/80 px-8 text-center backdrop-blur-[2px]"
+                  className="pointer-events-none absolute inset-x-0 top-0 flex flex-col items-center gap-3 bg-gradient-to-b from-greige-deep/90 via-greige-deep/60 to-transparent px-8 pt-6 pb-12 text-center"
                 >
                   <p className="text-[0.7rem] tracking-[0.4em] text-cream/70 uppercase">
                     calibration · step {calPhase === "rest" ? 1 : 2} of 2
@@ -993,6 +993,38 @@ export default function PerformanceStage() {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            <AnimatePresence>
+              {calibrating && calDiag && (
+                <motion.div
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 14 }}
+                  transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  className="pointer-events-none absolute bottom-4 left-4 rounded-2xl border border-cream/20 bg-greige-deep/80 px-4 py-3 text-left font-mono text-[0.62rem] leading-[1.7] tracking-[0.12em] text-cream/80 backdrop-blur-[3px]"
+                >
+                  <p className="mb-1 tracking-[0.3em] text-cream/55 uppercase">diagnostics</p>
+                  <p>
+                    <span className="text-sienna">press plane</span>{" "}
+                    {calDiag.pressY.toFixed(3)}
+                  </p>
+                  <p>release {calDiag.releaseY.toFixed(3)}</p>
+                  <p>hysteresis gap {(calDiag.pressY - calDiag.releaseY).toFixed(3)}</p>
+                  <p>rest {calDiag.restY ? calDiag.restY.toFixed(3) : "—"}</p>
+                  <p>jitter {calDiag.jitter.toFixed(4)}</p>
+                  <p>peak vel {calDiag.peakVel.toFixed(4)}</p>
+                  <p>
+                    tip depth{" "}
+                    {calDiag.deepestY !== null ? calDiag.deepestY.toFixed(3) : "—"}
+                    {calDiag.deepestY !== null && calDiag.deepestY > calDiag.pressY ? (
+                      <span className="text-sienna"> · below</span>
+                    ) : null}
+                  </p>
+                  <p>samples {calDiag.samples}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
           </div>
         </div>
 
