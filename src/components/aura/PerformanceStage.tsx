@@ -388,13 +388,14 @@ export default function PerformanceStage() {
 
 
   const analyse = useCallback(
-    (hands: Hand[], w: number, h: number) => {
-      if (instrumentRef.current === "piano") analysePiano(hands, w, h);
-      else if (instrumentRef.current === "guitar") analyseGuitar(hands, w, h);
-      else analyseDrums(hands, w, h);
+    (hands: Hand[], w: number, h: number, dt: number) => {
+      if (instrumentRef.current === "piano") analysePiano(hands, w, h, dt);
+      else if (instrumentRef.current === "guitar") analyseGuitar(hands, w, h, dt);
+      else analyseDrums(hands, w, h, dt);
     },
     [analyseDrums, analyseGuitar, analysePiano],
   );
+
 
   /* ---------------- rendering ---------------- */
 
@@ -692,9 +693,12 @@ export default function PerformanceStage() {
   const loop = useCallback(() => {
     const video = videoRef.current;
     const landmarker = landmarkerRef.current;
+    const nowTs = performance.now();
+    const dt = lastFrameRef.current ? Math.min(100, nowTs - lastFrameRef.current) : 16.667;
+    lastFrameRef.current = nowTs;
     if (video && landmarker && video.readyState >= 2) {
       try {
-        const res = landmarker.detectForVideo(video, performance.now());
+        const res = landmarker.detectForVideo(video, nowTs);
         const hands = buildHands(
           (res.landmarks ?? []) as never,
           (res.handedness ?? []) as never,
@@ -706,8 +710,9 @@ export default function PerformanceStage() {
         if (canvas) {
           const phase = calPhaseRef.current;
           if (phase === "rest" || phase === "press") sampleCalibration(hands);
-          else analyse(hands, canvas.width, canvas.height);
+          else analyse(hands, canvas.width, canvas.height, dt);
         }
+
       } catch {
         /* frame skipped */
       }
