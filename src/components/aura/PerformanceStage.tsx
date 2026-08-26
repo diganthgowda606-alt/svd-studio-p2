@@ -135,6 +135,7 @@ export default function PerformanceStage() {
   }>({ fingers: 0, quality: "major", tilt: 0, label: null });
 
   const chordKeyRef = useRef<string>("");
+  const chordZoneRef = useRef(-1);
   const chordGlowRef = useRef(0);
 
   const calRef = useRef<Calibration>(DEFAULT_CALIBRATION);
@@ -450,6 +451,7 @@ export default function PerformanceStage() {
           setChordState({ fingers: 0, quality: "major", tilt: 0, label: null });
         }
         setFingersTracked(0);
+        chordZoneRef.current = -1;
         return;
       }
 
@@ -457,6 +459,7 @@ export default function PerformanceStage() {
       const tilt = handTilt(hand);
       const quality = qualityFromTilt(tilt);
       setFingersTracked(fingers);
+      chordZoneRef.current = fingers >= 1 ? fingers - 1 : -1;
 
       if (fingers < 1) {
         if (chordKeyRef.current) {
