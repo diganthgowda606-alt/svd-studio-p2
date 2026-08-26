@@ -8,6 +8,9 @@ import {
   pluckGuitar,
   playPiano,
   playDrum,
+  playChord,
+  stopChord,
+  setToneColor,
   setMasterVolume,
   startAudio,
   transpose,
@@ -15,6 +18,16 @@ import {
   type InstrumentKind,
 } from "@/lib/aura/audio";
 import { DRUM_KIT, pieceAt, type DrumPiece } from "@/lib/aura/drumKit";
+import {
+  CHORD_DEGREE_LABELS,
+  CHORD_ROOTS,
+  chordLabel,
+  chordNotes,
+  countFingers,
+  handTilt,
+  qualityFromTilt,
+  type ChordQuality,
+} from "@/lib/aura/chords";
 import { buildHands, createHandLandmarker, type Hand } from "@/lib/aura/handTracking";
 import {
   DEFAULT_CALIBRATION,
