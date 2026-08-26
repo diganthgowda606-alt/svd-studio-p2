@@ -68,6 +68,19 @@ const CONNECTIONS: [number, number][] = [
 type HandMotion = { y: number; vy: number; lastStrike: number };
 type TipMotion = { y: number; vy: number };
 
+/** live calibration diagnostics shown in the on-screen overlay */
+type CalDiag = {
+  tipY: number | null;
+  deepestY: number | null;
+  restY: number;
+  jitter: number;
+  peakVel: number;
+  pressY: number;
+  releaseY: number;
+  samples: number;
+};
+
+
 /** gesture timing constants (ms) — debounce windows keep triggers from chattering */
 const FINGER_REFRACTORY = 110; // same finger can't retrigger faster than this
 const KEY_REFRACTORY = 70; // same note can't retrigger faster than this
@@ -99,13 +112,17 @@ export default function PerformanceStage() {
   const [calProgress, setCalProgress] = useState(0);
   const [calibrated, setCalibrated] = useState(false);
   const [flowIn, setFlowIn] = useState(false);
+  const [calDiag, setCalDiag] = useState<CalDiag | null>(null);
 
   const calRef = useRef<Calibration>(DEFAULT_CALIBRATION);
   const calPhaseRef = useRef<CalPhase>("none");
   const calStartRef = useRef(0);
   const calSamplesRef = useRef<CalibrationSamples>(emptySamples());
   const calPrevYRef = useRef<number | null>(null);
+  const calDiagRef = useRef<CalDiag | null>(null);
+  const calDiagPushRef = useRef(0);
   const smoothRef = useRef<Record<number, { x: number; y: number; z: number }[]>>({});
+
 
   const instrumentRef = useRef(instrument);
   instrumentRef.current = instrument;
@@ -613,7 +630,80 @@ export default function PerformanceStage() {
         ctx.stroke();
       }
     }
+
+    // ---- calibration diagnostics: press plane + hysteresis gap ----
+    const calPhase = calPhaseRef.current;
+    const diag = calDiagRef.current;
+    if ((calPhase === "rest" || calPhase === "press") && diag) {
+      const pressPx = diag.pressY * h;
+      const releasePx = diag.releaseY * h;
+      const x0 = w * 0.06;
+      const x1 = w * 0.94;
+
+      // hysteresis band
+      ctx.fillStyle = SIENNA + "0.16)";
+      ctx.fillRect(x0, releasePx, x1 - x0, Math.max(1, pressPx - releasePx));
+
+      // release plane (dashed cream)
+      ctx.setLineDash([4, 7]);
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = CREAM + "0.55)";
+      ctx.beginPath();
+      ctx.moveTo(x0, releasePx);
+      ctx.lineTo(x1, releasePx);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // press plane (solid sienna)
+      ctx.strokeStyle = SIENNA + "0.95)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x0, pressPx);
+      ctx.lineTo(x1, pressPx);
+      ctx.stroke();
+
+      ctx.font = `${Math.max(9, w * 0.0095)}px system-ui`;
+      ctx.textAlign = "left";
+      ctx.fillStyle = CREAM + "0.8)";
+      ctx.fillText("RELEASE", x0 + 4, releasePx - 5);
+      ctx.fillStyle = SIENNA + "1)";
+      ctx.fillText("PRESS PLANE", x0 + 4, pressPx + 13);
+      ctx.textAlign = "right";
+      ctx.fillStyle = CREAM + "0.7)";
+      ctx.fillText(
+        `GAP ${(diag.pressY - diag.releaseY).toFixed(3)}`,
+        x1 - 4,
+        (pressPx + releasePx) / 2 + 3,
+      );
+
+      // live fingertip depth marker
+      if (diag.deepestY !== null) {
+        const y = diag.deepestY * h;
+        const below = diag.deepestY > diag.pressY;
+        ctx.strokeStyle = below ? SIENNA + "0.9)" : CREAM + "0.45)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([2, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x0, y);
+        ctx.lineTo(x1, y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      if (diag.restY > 0) {
+        const y = diag.restY * h;
+        ctx.strokeStyle = CHARCOAL + "0.7)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x0, y);
+        ctx.lineTo(x1, y);
+        ctx.stroke();
+        ctx.textAlign = "left";
+        ctx.fillStyle = CREAM + "0.55)";
+        ctx.fillText("REST", x0 + 4, y - 4);
+      }
+    }
   }, [drawKit]);
+
 
   /** exponential smoothing of landmarks — removes tracker jitter before any trigger test */
   const smoothHands = useCallback((hands: Hand[]) => {
@@ -670,7 +760,34 @@ export default function PerformanceStage() {
       }
     }
 
+    // live diagnostics: provisional thresholds from samples gathered so far
+    {
+      const s = calSamplesRef.current;
+      const provisional = computeCalibration(s);
+      const tips = hands.length
+        ? hands.flatMap((h) => FINGER_TIPS.map((i) => h.landmarks[i]!.y))
+        : [];
+      const diag: CalDiag = {
+        tipY: tips.length ? tips.reduce((a, b) => a + b, 0) / tips.length : null,
+        deepestY: tips.length ? Math.max(...tips) : null,
+        restY: s.restY.length ? s.restY.reduce((a, b) => a + b, 0) / s.restY.length : 0,
+        jitter: s.restJitter.length
+          ? s.restJitter.reduce((a, b) => a + b, 0) / s.restJitter.length
+          : 0,
+        peakVel: s.peakVels.length ? Math.max(...s.peakVels) : 0,
+        pressY: provisional.pressY,
+        releaseY: provisional.releaseY,
+        samples: s.restY.length + s.pressYs.length,
+      };
+      calDiagRef.current = diag;
+      if (now - calDiagPushRef.current > 90) {
+        calDiagPushRef.current = now;
+        setCalDiag(diag);
+      }
+    }
+
     if (elapsed < total) return;
+
 
     if (phase === "rest") {
       calPhaseRef.current = "press";
@@ -853,7 +970,7 @@ export default function PerformanceStage() {
                   animate={{ opacity: 1, filter: "blur(0px)" }}
                   exit={{ opacity: 0, filter: "blur(8px)" }}
                   transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute inset-0 flex flex-col items-center justify-center gap-5 bg-greige-deep/80 px-8 text-center backdrop-blur-[2px]"
+                  className="pointer-events-none absolute inset-x-0 top-0 flex flex-col items-center gap-3 bg-gradient-to-b from-greige-deep/90 via-greige-deep/60 to-transparent px-8 pt-6 pb-12 text-center"
                 >
                   <p className="text-[0.7rem] tracking-[0.4em] text-cream/70 uppercase">
                     calibration · step {calPhase === "rest" ? 1 : 2} of 2
@@ -876,6 +993,38 @@ export default function PerformanceStage() {
                 </motion.div>
               )}
             </AnimatePresence>
+
+            <AnimatePresence>
+              {calibrating && calDiag && (
+                <motion.div
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 14 }}
+                  transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                  className="pointer-events-none absolute bottom-4 left-4 rounded-2xl border border-cream/20 bg-greige-deep/80 px-4 py-3 text-left font-mono text-[0.62rem] leading-[1.7] tracking-[0.12em] text-cream/80 backdrop-blur-[3px]"
+                >
+                  <p className="mb-1 tracking-[0.3em] text-cream/55 uppercase">diagnostics</p>
+                  <p>
+                    <span className="text-sienna">press plane</span>{" "}
+                    {calDiag.pressY.toFixed(3)}
+                  </p>
+                  <p>release {calDiag.releaseY.toFixed(3)}</p>
+                  <p>hysteresis gap {(calDiag.pressY - calDiag.releaseY).toFixed(3)}</p>
+                  <p>rest {calDiag.restY ? calDiag.restY.toFixed(3) : "—"}</p>
+                  <p>jitter {calDiag.jitter.toFixed(4)}</p>
+                  <p>peak vel {calDiag.peakVel.toFixed(4)}</p>
+                  <p>
+                    tip depth{" "}
+                    {calDiag.deepestY !== null ? calDiag.deepestY.toFixed(3) : "—"}
+                    {calDiag.deepestY !== null && calDiag.deepestY > calDiag.pressY ? (
+                      <span className="text-sienna"> · below</span>
+                    ) : null}
+                  </p>
+                  <p>samples {calDiag.samples}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
           </div>
         </div>
 
