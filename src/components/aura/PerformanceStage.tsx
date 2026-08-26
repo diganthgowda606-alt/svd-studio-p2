@@ -439,14 +439,58 @@ export default function PerformanceStage() {
     [strikePiece],
   );
 
+  /** finger count picks the chord root, hand tilt picks major / minor */
+  const analyseChords = useCallback(
+    (hands: Hand[], w: number, h: number) => {
+      const hand = hands[0];
+      if (!hand) {
+        if (chordKeyRef.current) {
+          stopChord();
+          chordKeyRef.current = "";
+          setChordState({ fingers: 0, quality: "major", tilt: 0, label: null });
+        }
+        setFingersTracked(0);
+        return;
+      }
+
+      const fingers = countFingers(hand);
+      const tilt = handTilt(hand);
+      const quality = qualityFromTilt(tilt);
+      setFingersTracked(fingers);
+
+      if (fingers < 1) {
+        if (chordKeyRef.current) {
+          stopChord();
+          chordKeyRef.current = "";
+        }
+        setChordState({ fingers, quality, tilt, label: null });
+        return;
+      }
+
+      const root = CHORD_ROOTS[fingers - 1] ?? "C3";
+      const key = `${root}-${quality}`;
+      const label = chordLabel(root, quality);
+      if (key !== chordKeyRef.current) {
+        chordKeyRef.current = key;
+        playChord(chordNotes(root, quality), 0.55);
+        chordGlowRef.current = 1;
+        setActiveNote(label);
+        const wrist = hand.landmarks[0];
+        if (wrist) addRipple((1 - wrist.x) * w, wrist.y * h, "cream", 260);
+      }
+      setChordState({ fingers, quality, tilt, label });
+    },
+    [addRipple],
+  );
 
   const analyse = useCallback(
     (hands: Hand[], w: number, h: number, dt: number) => {
       if (instrumentRef.current === "piano") analysePiano(hands, w, h, dt);
       else if (instrumentRef.current === "guitar") analyseGuitar(hands, w, h, dt);
+      else if (instrumentRef.current === "chords") analyseChords(hands, w, h);
       else analyseDrums(hands, w, h, dt);
     },
-    [analyseDrums, analyseGuitar, analysePiano],
+    [analyseChords, analyseDrums, analyseGuitar, analysePiano],
   );
 
 
