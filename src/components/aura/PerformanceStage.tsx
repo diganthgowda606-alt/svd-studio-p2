@@ -1279,6 +1279,45 @@ export default function PerformanceStage() {
               />
             ))}
           </div>
+        ) : instrument === "chords" ? (
+          <div className="panel flex flex-col gap-5 rounded-3xl p-6">
+            <div className="grid grid-cols-5 gap-2">
+              {CHORD_ROOTS.map((root, i) => {
+                const active = chordState.fingers === i + 1;
+                return (
+                  <motion.div
+                    key={root}
+                    animate={{ opacity: active ? 1 : 0.6, y: active ? -4 : 0 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 24 }}
+                    className={`rounded-2xl border px-3 py-5 text-center transition-colors duration-300 ${
+                      active
+                        ? "border-cream/60 bg-sienna text-cream"
+                        : "border-cream/20 bg-charcoal/50 text-cream/70"
+                    }`}
+                  >
+                    <p className="font-display text-2xl">
+                      {chordLabel(root, active ? chordState.quality : "major")}
+                    </p>
+                    <p className="mt-1 text-[0.6rem] tracking-[0.25em] uppercase">
+                      {i + 1} finger{i ? "s" : ""} · {CHORD_DEGREE_LABELS[i]}
+                    </p>
+                  </motion.div>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap items-center gap-6 text-[0.65rem] tracking-[0.22em] text-cream/70 uppercase">
+              <span>
+                quality{" "}
+                <span className="text-cream">{chordState.quality}</span>
+              </span>
+              <span>
+                tilt <span className="text-cream">{chordState.tilt.toFixed(0)}°</span>
+              </span>
+              <span>
+                fingers <span className="text-cream">{chordState.fingers}</span>
+              </span>
+            </div>
+          </div>
         ) : (
           <div className="panel grid grid-cols-3 gap-2 rounded-3xl p-5 sm:grid-cols-5 lg:grid-cols-8">
             {DRUM_KIT.map((p) => (
