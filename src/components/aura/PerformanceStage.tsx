@@ -1147,9 +1147,9 @@ export default function PerformanceStage() {
                 <button
                   key={kind}
                   onClick={() => setInstrument(kind)}
-                  className={`rounded-full px-4 py-2 text-xs tracking-[0.2em] uppercase transition-all duration-500 ${
+                  className={`glass-btn rounded-full px-4 py-2 text-xs tracking-[0.2em] uppercase ${
                     instrument === kind
-                      ? "bg-charcoal text-cream"
+                      ? "glass-btn-accent text-cream"
                       : "text-cream/70 hover:text-cream"
                   }`}
                 >
