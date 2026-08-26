@@ -68,6 +68,19 @@ const CONNECTIONS: [number, number][] = [
 type HandMotion = { y: number; vy: number; lastStrike: number };
 type TipMotion = { y: number; vy: number };
 
+/** live calibration diagnostics shown in the on-screen overlay */
+type CalDiag = {
+  tipY: number | null;
+  deepestY: number | null;
+  restY: number;
+  jitter: number;
+  peakVel: number;
+  pressY: number;
+  releaseY: number;
+  samples: number;
+};
+
+
 /** gesture timing constants (ms) — debounce windows keep triggers from chattering */
 const FINGER_REFRACTORY = 110; // same finger can't retrigger faster than this
 const KEY_REFRACTORY = 70; // same note can't retrigger faster than this
@@ -99,13 +112,17 @@ export default function PerformanceStage() {
   const [calProgress, setCalProgress] = useState(0);
   const [calibrated, setCalibrated] = useState(false);
   const [flowIn, setFlowIn] = useState(false);
+  const [calDiag, setCalDiag] = useState<CalDiag | null>(null);
 
   const calRef = useRef<Calibration>(DEFAULT_CALIBRATION);
   const calPhaseRef = useRef<CalPhase>("none");
   const calStartRef = useRef(0);
   const calSamplesRef = useRef<CalibrationSamples>(emptySamples());
   const calPrevYRef = useRef<number | null>(null);
+  const calDiagRef = useRef<CalDiag | null>(null);
+  const calDiagPushRef = useRef(0);
   const smoothRef = useRef<Record<number, { x: number; y: number; z: number }[]>>({});
+
 
   const instrumentRef = useRef(instrument);
   instrumentRef.current = instrument;
