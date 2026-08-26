@@ -195,3 +195,31 @@ export function getWaveform(): Float32Array | null {
 export function transpose(note: string, semitones: number) {
   return Tone.Frequency(note).transpose(semitones).toNote();
 }
+
+/* ---- chord pad ---- */
+
+/** tone colour 0..1 -> filter cutoff (dark, woody -> bright, glassy) */
+export function setToneColor(value: number) {
+  if (!padFilter) return;
+  const v = Math.min(1, Math.max(0, value));
+  padFilter.frequency.rampTo(320 * Math.pow(18, v), 0.12);
+}
+
+/** hold a chord; retriggers only the notes that changed */
+export function playChord(notes: string[], velocity = 0.6) {
+  if (!pad) return;
+  const same =
+    notes.length === padNotes.length && notes.every((n, i) => n === padNotes[i]);
+  if (same) return;
+  const release = padNotes.filter((n) => !notes.includes(n));
+  const attack = notes.filter((n) => !padNotes.includes(n));
+  if (release.length) pad.triggerRelease(release);
+  if (attack.length) pad.triggerAttack(attack, undefined, velocity);
+  padNotes = [...notes];
+}
+
+export function stopChord() {
+  if (!pad || !padNotes.length) return;
+  pad.triggerRelease(padNotes);
+  padNotes = [];
+}
