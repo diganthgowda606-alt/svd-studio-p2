@@ -636,6 +636,25 @@ export default function PerformanceStage() {
         }
         ctx.stroke();
       });
+    } else if (instrumentRef.current === "chords") {
+      // five chord zones + a tilt meter
+      const glow = chordGlowRef.current;
+      chordGlowRef.current = glow * 0.94;
+      const zoneW = (w * 0.9) / CHORD_ROOTS.length;
+      const top = h * 0.72;
+      for (let i = 0; i < CHORD_ROOTS.length; i++) {
+        const x = w * 0.05 + i * zoneW;
+        const on = i === chordZoneRef.current;
+        ctx.fillStyle = on ? SIENNA + (0.35 + glow * 0.4).toFixed(3) + ")" : CREAM + "0.06)";
+        ctx.fillRect(x + 2, top, zoneW - 4, h * 0.2);
+        ctx.strokeStyle = CREAM + (on ? "0.7)" : "0.18)");
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 2, top, zoneW - 4, h * 0.2);
+        ctx.fillStyle = CREAM + (on ? "0.95)" : "0.5)");
+        ctx.font = `${Math.max(10, w * 0.011)}px system-ui`;
+        ctx.textAlign = "center";
+        ctx.fillText(`${i + 1} · ${CHORD_DEGREE_LABELS[i]}`, x + zoneW / 2, top + h * 0.115);
+      }
     } else {
       drawKit(ctx, w, h);
     }
