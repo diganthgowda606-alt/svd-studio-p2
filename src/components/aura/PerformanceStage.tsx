@@ -183,6 +183,19 @@ export default function PerformanceStage() {
   }, [volume]);
 
   useEffect(() => {
+    setToneColor(toneColor);
+  }, [toneColor]);
+
+  // release any sustained chord when leaving chord mode
+  useEffect(() => {
+    if (instrument !== "chords") {
+      stopChord();
+      chordKeyRef.current = "";
+      setChordState((s) => ({ ...s, label: null }));
+    }
+  }, [instrument]);
+
+  useEffect(() => {
     const id = requestAnimationFrame(() => setFlowIn(true));
     return () => cancelAnimationFrame(id);
   }, []);
