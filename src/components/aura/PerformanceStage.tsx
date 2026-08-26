@@ -687,7 +687,34 @@ export default function PerformanceStage() {
       }
     }
 
+    // live diagnostics: provisional thresholds from samples gathered so far
+    {
+      const s = calSamplesRef.current;
+      const provisional = computeCalibration(s);
+      const tips = hands.length
+        ? hands.flatMap((h) => FINGER_TIPS.map((i) => h.landmarks[i]!.y))
+        : [];
+      const diag: CalDiag = {
+        tipY: tips.length ? tips.reduce((a, b) => a + b, 0) / tips.length : null,
+        deepestY: tips.length ? Math.max(...tips) : null,
+        restY: s.restY.length ? s.restY.reduce((a, b) => a + b, 0) / s.restY.length : 0,
+        jitter: s.restJitter.length
+          ? s.restJitter.reduce((a, b) => a + b, 0) / s.restJitter.length
+          : 0,
+        peakVel: s.peakVels.length ? Math.max(...s.peakVels) : 0,
+        pressY: provisional.pressY,
+        releaseY: provisional.releaseY,
+        samples: s.restY.length + s.pressYs.length,
+      };
+      calDiagRef.current = diag;
+      if (now - calDiagPushRef.current > 90) {
+        calDiagPushRef.current = now;
+        setCalDiag(diag);
+      }
+    }
+
     if (elapsed < total) return;
+
 
     if (phase === "rest") {
       calPhaseRef.current = "press";
