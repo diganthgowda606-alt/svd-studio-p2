@@ -1169,7 +1169,7 @@ export default function PerformanceStage() {
             <button
               onClick={() => (running ? startCalibration() : begin(true))}
               disabled={calibrating}
-              className="w-full rounded-full border border-cream/25 px-4 py-2 text-[0.65rem] tracking-[0.25em] text-cream/80 uppercase transition-all duration-500 hover:bg-charcoal hover:text-cream disabled:opacity-40"
+              className="glass-btn w-full rounded-full px-4 py-2 text-[0.65rem] tracking-[0.25em] text-cream/80 uppercase hover:text-cream disabled:opacity-40"
             >
               recalibrate
             </button>
