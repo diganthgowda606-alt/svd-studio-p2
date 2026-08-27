@@ -52,7 +52,6 @@ type Ripple = { x: number; y: number; r: number; max: number; tone: "sienna" | "
 const CREAM = "rgba(243, 236, 224, ";
 const CHARCOAL = "rgba(60, 53, 45, ";
 const SIENNA = "rgba(122, 60, 35, ";
-const COPPER = "rgba(154, 84, 48, ";
 const BRASS = "rgba(226, 214, 190, ";
 
 const FINGER_TIPS = [4, 8, 12, 16, 20];
@@ -86,7 +85,6 @@ const CONNECTIONS: [number, number][] = [
   [0, 17],
 ];
 
-type HandMotion = { y: number; vy: number; lastStrike: number };
 type TipMotion = { y: number; vy: number };
 
 /** live calibration diagnostics shown in the on-screen overlay */
@@ -106,7 +104,6 @@ type CalDiag = {
 const FINGER_REFRACTORY = 110; // same finger can't retrigger faster than this
 const KEY_REFRACTORY = 70; // same note can't retrigger faster than this
 const STRING_REFRACTORY = 190;
-const PIECE_REFRACTORY = 95; // same drum/cymbal
 const HAND_REFRACTORY = 105; // same hand
 /** velocity smoothing factor per 16.7ms frame (higher = snappier, noisier) */
 const VEL_SMOOTH = 0.45;
@@ -128,7 +125,6 @@ export default function PerformanceStage() {
   const [stringPulse, setStringPulse] = useState<Record<number, number>>({});
   const [handsSeen, setHandsSeen] = useState(0);
   const [fingersTracked, setFingersTracked] = useState(0);
-  const [lastHit, setLastHit] = useState<string | null>(null);
   const [calPhase, setCalPhase] = useState<CalPhase>("none");
   const [calProgress, setCalProgress] = useState(0);
   const [calibrated, setCalibrated] = useState(false);
@@ -194,11 +190,8 @@ export default function PerformanceStage() {
   // guitar strum velocity
   const strumMotionRef = useRef<{ x: number; y: number; v: number } | null>(null);
 
-  // drums
-  const handMotionRef = useRef<Record<number, HandMotion>>({});
+  // violin
   const pieceLastHitRef = useRef<Record<string, number>>({});
-  const pieceGlowRef = useRef<Record<string, number>>({});
-  const kickGlowRef = useRef(0);
   const lastKickRef = useRef(0);
   const lastFrameRef = useRef(0);
 
