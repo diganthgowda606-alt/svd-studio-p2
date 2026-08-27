@@ -73,7 +73,7 @@ export async function startAudio() {
     envelope: { attack: 0.28, decay: 0.6, sustain: 0.75, release: 1.4 },
   }).connect(padFilter);
   pad.maxPolyphony = 12;
-  pad.volume.value = -14;
+  pad.volume.value = -2;
 
   // Violin: sustained bowed voice with vibrato and a bow-pressure filter
   violinVibrato = new Tone.Vibrato({ frequency: 5.2, depth: 0.12 }).connect(reverb);
