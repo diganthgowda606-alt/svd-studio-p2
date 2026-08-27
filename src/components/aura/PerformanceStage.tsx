@@ -17,6 +17,8 @@ import {
   startAudio,
   transpose,
   getWaveform,
+  startRecording,
+  stopRecording,
   type InstrumentKind,
 } from "@/lib/aura/audio";
 import {
