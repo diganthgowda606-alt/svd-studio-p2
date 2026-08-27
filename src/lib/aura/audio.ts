@@ -1,6 +1,6 @@
 import * as Tone from "tone";
 
-export type InstrumentKind = "piano" | "guitar" | "drums" | "chords";
+export type InstrumentKind = "piano" | "guitar" | "violin" | "chords";
 
 export const PIANO_NOTES = [
   "C3",
@@ -35,16 +35,11 @@ let pad: Tone.PolySynth<Tone.Synth> | null = null;
 let padFilter: Tone.Filter | null = null;
 let padNotes: string[] = [];
 
-/* ---- Infernal Pulse drum voices ---- */
-type DrumVoices = {
-  kick: Tone.MembraneSynth;
-  snareBody: Tone.MembraneSynth;
-  snareWire: Tone.NoiseSynth;
-  tom: Tone.MembraneSynth;
-  hat: Tone.MetalSynth;
-  cymbal: Tone.MetalSynth;
-};
-let drums: DrumVoices | null = null;
+/* ---- Aura Violin: one continuously bowed voice ---- */
+let violin: Tone.FMSynth | null = null;
+let violinFilter: Tone.Filter | null = null;
+let violinVibrato: Tone.Vibrato | null = null;
+let violinNote: string | null = null;
 
 export async function startAudio() {
   if (started) return;
@@ -80,59 +75,20 @@ export async function startAudio() {
   pad.maxPolyphony = 12;
   pad.volume.value = -14;
 
-  // Drum bus: tight, punchy, minimal reverb for metal articulation
-  const drumRoom = new Tone.Reverb({ decay: 1.4, wet: 0.12 }).connect(volumeNode);
-  const punch = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.003, release: 0.12 }).connect(
-    drumRoom,
+  // Violin: sustained bowed voice with vibrato and a bow-pressure filter
+  violinVibrato = new Tone.Vibrato({ frequency: 5.2, depth: 0.12 }).connect(reverb);
+  violinFilter = new Tone.Filter({ type: "lowpass", frequency: 2200, Q: 1.1 }).connect(
+    violinVibrato,
   );
-
-  const kick = new Tone.MembraneSynth({
-    pitchDecay: 0.028,
-    octaves: 7,
-    oscillator: { type: "sine" },
-    envelope: { attack: 0.001, decay: 0.32, sustain: 0, release: 0.18 },
-  }).connect(punch);
-  kick.volume.value = 0;
-
-  const snareBody = new Tone.MembraneSynth({
-    pitchDecay: 0.02,
-    octaves: 3,
-    envelope: { attack: 0.001, decay: 0.14, sustain: 0, release: 0.05 },
-  }).connect(punch);
-  snareBody.volume.value = -12;
-
-  const snareWire = new Tone.NoiseSynth({
-    noise: { type: "white" },
-    envelope: { attack: 0.001, decay: 0.16, sustain: 0, release: 0.03 },
-  }).connect(punch);
-  snareWire.volume.value = -8;
-
-  const tom = new Tone.MembraneSynth({
-    pitchDecay: 0.06,
-    octaves: 4,
-    envelope: { attack: 0.001, decay: 0.4, sustain: 0, release: 0.25 },
-  }).connect(punch);
-  tom.volume.value = -6;
-
-  const hat = new Tone.MetalSynth({
-    envelope: { attack: 0.001, decay: 0.06, release: 0.02 },
-    harmonicity: 5.1,
-    modulationIndex: 32,
-    resonance: 7000,
-    octaves: 1.5,
-  }).connect(punch);
-  hat.volume.value = -22;
-
-  const cymbal = new Tone.MetalSynth({
-    envelope: { attack: 0.001, decay: 1.6, release: 1.2 },
-    harmonicity: 3.6,
-    modulationIndex: 42,
-    resonance: 5200,
-    octaves: 2,
-  }).connect(drumRoom);
-  cymbal.volume.value = -26;
-
-  drums = { kick, snareBody, snareWire, tom, hat, cymbal };
+  violin = new Tone.FMSynth({
+    harmonicity: 2.02,
+    modulationIndex: 6.5,
+    oscillator: { type: "sawtooth" },
+    modulation: { type: "sine" },
+    envelope: { attack: 0.16, decay: 0.2, sustain: 0.9, release: 0.5 },
+    modulationEnvelope: { attack: 0.3, decay: 0.2, sustain: 0.7, release: 0.4 },
+  }).connect(violinFilter);
+  violin.volume.value = -12;
 
   started = true;
 }
@@ -154,37 +110,32 @@ export function pluckGuitar(note: string, velocity = 0.8) {
   guitar?.triggerAttackRelease(note, "8n", undefined, velocity);
 }
 
-export type DrumVoice =
-  | { kind: "kick"; note: string }
-  | { kind: "snare" }
-  | { kind: "tom"; note: string }
-  | { kind: "hat"; open?: boolean }
-  | { kind: "cymbal"; freq: number; decay: number };
+/* ---- violin ---- */
 
-export function playDrum(voice: DrumVoice, velocity = 0.9) {
-  if (!drums) return;
-  const t = Tone.now();
-  switch (voice.kind) {
-    case "kick":
-      drums.kick.triggerAttackRelease(voice.note, "8n", t, velocity);
-      break;
-    case "snare":
-      drums.snareBody.triggerAttackRelease("G2", "16n", t, velocity * 0.8);
-      drums.snareWire.triggerAttackRelease("16n", t, velocity);
-      break;
-    case "tom":
-      drums.tom.triggerAttackRelease(voice.note, "8n", t, velocity);
-      break;
-    case "hat":
-      drums.hat.envelope.decay = voice.open ? 0.32 : 0.05;
-      drums.hat.triggerAttackRelease("32n", t, velocity);
-      break;
-    case "cymbal":
-      drums.cymbal.frequency.value = voice.freq;
-      drums.cymbal.envelope.decay = voice.decay;
-      drums.cymbal.triggerAttackRelease("8n", t, velocity);
-      break;
+/** bow intensity 0..1 -> loudness, brightness and vibrato depth */
+export function setViolinIntensity(value: number) {
+  const v = Math.min(1, Math.max(0, value));
+  if (violin) violin.volume.rampTo(-26 + v * 20, 0.12);
+  if (violinFilter) violinFilter.frequency.rampTo(700 + v * 4200, 0.12);
+  if (violinVibrato) violinVibrato.depth.rampTo(0.05 + v * 0.22, 0.2);
+}
+
+/** start or glide the bowed note; retriggers only when the pitch changes */
+export function bowViolin(note: string, velocity = 0.8) {
+  if (!violin) return;
+  if (violinNote === note) return;
+  if (violinNote) {
+    violin.frequency.rampTo(Tone.Frequency(note).toFrequency(), 0.06);
+  } else {
+    violin.triggerAttack(note, undefined, velocity);
   }
+  violinNote = note;
+}
+
+export function stopViolin() {
+  if (!violin || !violinNote) return;
+  violin.triggerRelease();
+  violinNote = null;
 }
 
 export function getWaveform(): Float32Array | null {

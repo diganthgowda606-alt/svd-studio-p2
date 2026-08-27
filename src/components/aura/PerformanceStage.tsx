@@ -7,7 +7,9 @@ import {
   isAudioStarted,
   pluckGuitar,
   playPiano,
-  playDrum,
+  bowViolin,
+  stopViolin,
+  setViolinIntensity,
   playChord,
   stopChord,
   setToneColor,
@@ -17,7 +19,13 @@ import {
   getWaveform,
   type InstrumentKind,
 } from "@/lib/aura/audio";
-import { DRUM_KIT, pieceAt, type DrumPiece } from "@/lib/aura/drumKit";
+import {
+  VIOLIN_DEGREE_LABELS,
+  registerFromTilt,
+  violinLabel,
+  violinNote,
+  type ViolinRegister,
+} from "@/lib/aura/violin";
 import {
   CHORD_DEGREE_LABELS,
   CHORD_ROOTS,
@@ -134,6 +142,20 @@ export default function PerformanceStage() {
     label: string | null;
   }>({ fingers: 0, quality: "major", tilt: 0, label: null });
 
+  const [violinState, setViolinState] = useState<{
+    fingers: number;
+    tilt: number;
+    register: ViolinRegister;
+    label: string | null;
+    intensity: number;
+  }>({ fingers: 0, tilt: 0, register: "low", label: null, intensity: 0.55 });
+
+  const violinKeyRef = useRef<string>("");
+  const violinZoneRef = useRef(-1);
+  const violinGlowRef = useRef(0);
+  const violinIntensityRef = useRef(0.55);
+  const violinPushRef = useRef(0);
+
   const chordKeyRef = useRef<string>("");
   const chordZoneRef = useRef(-1);
   const chordGlowRef = useRef(0);
@@ -191,6 +213,11 @@ export default function PerformanceStage() {
 
   // release any sustained chord when leaving chord mode
   useEffect(() => {
+    if (instrument !== "violin") {
+      stopViolin();
+      violinKeyRef.current = "";
+      setViolinState((st) => ({ ...st, label: null }));
+    }
     if (instrument !== "chords") {
       stopChord();
       chordKeyRef.current = "";
@@ -234,22 +261,6 @@ export default function PerformanceStage() {
       stringVibrationRef.current[stringIndex] = 1;
       setStringPulse((p) => ({ ...p, [stringIndex]: (p[stringIndex] ?? 0) + 1 }));
       addRipple(x, y, stringIndex % 2 === 0 ? "charcoal" : "sienna");
-    },
-    [addRipple],
-  );
-
-  const strikePiece = useCallback(
-    (piece: DrumPiece, velocity: number, w: number, h: number) => {
-      playDrum(piece.voice, Math.min(1, Math.max(0.25, velocity)));
-      pieceGlowRef.current[piece.id] = 1;
-      setLastHit(piece.label);
-      setActiveNote(piece.label);
-      addRipple(
-        piece.cx * w,
-        piece.cy * h,
-        piece.kind === "cymbal" ? "cream" : "sienna",
-        piece.kind === "cymbal" ? 300 : 200,
-      );
     },
     [addRipple],
   );
@@ -386,60 +397,78 @@ export default function PerformanceStage() {
     [triggerString],
   );
 
-  const analyseDrums = useCallback(
-    (hands: Hand[], w: number, h: number, dt: number) => {
-      const now = performance.now();
-      const k = blend(VEL_SMOOTH, dt);
-      const strikes: { x: number; y: number; velocity: number; hand: number }[] = [];
+  /** right hand: finger count picks the degree, tilt lifts the octave. left hand bows intensity */
+  const analyseViolin = useCallback(
+    (hands: Hand[], w: number, h: number) => {
+      const sorted = [...hands].sort(
+        (a, b) => (1 - (a.palm?.x ?? 0.5)) - (1 - (b.palm?.x ?? 0.5)),
+      );
+      const leftHand = sorted.length > 1 ? sorted[0] : null;
+      const rightHand = sorted.length > 1 ? sorted[1] : sorted[0];
 
-      hands.forEach((hand, hi) => {
-        // mean of the whole landmark cluster = stable hand vector
-        let sy = 0;
-        let sx = 0;
-        for (const p of hand.landmarks) {
-          sy += p.y;
-          sx += 1 - p.x;
+      // ---- left hand: bow intensity (raise = stronger bow) ----
+      if (leftHand) {
+        const wrist = leftHand.landmarks[0];
+        if (wrist) {
+          const v = Math.min(1, Math.max(0, (0.85 - wrist.y) / 0.6));
+          violinIntensityRef.current = v;
+          setViolinIntensity(v);
+          const now = performance.now();
+          if (now - violinPushRef.current > 110) {
+            violinPushRef.current = now;
+            setViolinState((st) => (Math.abs(st.intensity - v) > 0.02 ? { ...st, intensity: v } : st));
+          }
         }
-        const y = sy / Math.max(1, hand.landmarks.length);
-        const x = sx / Math.max(1, hand.landmarks.length);
+      } else {
+        violinIntensityRef.current = 0.55;
+        setViolinIntensity(0.55);
+      }
 
-        const prev = handMotionRef.current[hi] ?? { y, vy: 0, lastStrike: 0 };
-        const rawVy = ((y - prev.y) * 16.667) / Math.max(1, dt);
-        const vy = prev.vy + (rawVy - prev.vy) * k;
-        // accelerating downward then reversing = strike
-        const reversed = prev.vy > calRef.current.strikeVel && vy < prev.vy * 0.45;
-        if (reversed && now - prev.lastStrike > HAND_REFRACTORY) {
-          strikes.push({ x, y, velocity: Math.min(1, 0.35 + prev.vy * 16), hand: hi });
-          handMotionRef.current[hi] = { y, vy: 0, lastStrike: now };
-        } else {
-          handMotionRef.current[hi] = { y, vy, lastStrike: prev.lastStrike };
+      const hand = rightHand;
+      if (!hand) {
+        if (violinKeyRef.current) {
+          stopViolin();
+          violinKeyRef.current = "";
+          setViolinState((st) => ({ ...st, fingers: 0, label: null }));
         }
+        setFingersTracked(0);
+        violinZoneRef.current = -1;
+        return;
+      }
+
+      const fingers = countFingers(hand);
+      const tilt = handTilt(hand);
+      const register = registerFromTilt(tilt);
+      setFingersTracked(fingers);
+      violinZoneRef.current = fingers >= 1 ? fingers - 1 : -1;
+
+      if (fingers < 1) {
+        if (violinKeyRef.current) {
+          stopViolin();
+          violinKeyRef.current = "";
+        }
+        setViolinState((st) => ({ ...st, fingers, tilt, register, label: null }));
+        return;
+      }
+
+      const note = violinNote(fingers, register);
+      if (note !== violinKeyRef.current) {
+        violinKeyRef.current = note;
+        bowViolin(note, 0.7);
+        violinGlowRef.current = 1;
+        setActiveNote(violinLabel(fingers, register));
+        const wrist = hand.landmarks[0];
+        if (wrist) addRipple((1 - wrist.x) * w, wrist.y * h, "cream", 240);
+      }
+      setViolinState({
+        fingers,
+        tilt,
+        register,
+        label: violinLabel(fingers, register),
+        intensity: violinIntensityRef.current,
       });
-
-      // both hands pumping together -> double kick
-      if (strikes.length === 2 && now - lastKickRef.current > 200) {
-        const avgLow = (strikes[0]!.y + strikes[1]!.y) / 2;
-        if (avgLow > 0.55) {
-          lastKickRef.current = now;
-          kickGlowRef.current = 1;
-          const kicks = DRUM_KIT.filter((p) => p.kind === "kick");
-          kicks.forEach((kp, i) =>
-            window.setTimeout(() => strikePiece(kp, 0.95, w, h), i * 45),
-          );
-          return;
-        }
-      }
-
-      for (const s of strikes) {
-        const piece = pieceAt(s.x, s.y);
-        if (!piece) continue;
-        const lastHit = pieceLastHitRef.current[piece.id] ?? 0;
-        if (now - lastHit < PIECE_REFRACTORY) continue;
-        pieceLastHitRef.current[piece.id] = now;
-        strikePiece(piece, s.velocity, w, h);
-      }
     },
-    [strikePiece],
+    [addRipple],
   );
 
   /** right hand: finger count + tilt pick the chord. left hand: height sets volume */
@@ -517,104 +546,13 @@ export default function PerformanceStage() {
       if (instrumentRef.current === "piano") analysePiano(hands, w, h, dt);
       else if (instrumentRef.current === "guitar") analyseGuitar(hands, w, h, dt);
       else if (instrumentRef.current === "chords") analyseChords(hands, w, h);
-      else analyseDrums(hands, w, h, dt);
+      else analyseViolin(hands, w, h);
     },
-    [analyseChords, analyseDrums, analyseGuitar, analysePiano],
+    [analyseChords, analyseViolin, analyseGuitar, analysePiano],
   );
 
 
   /* ---------------- rendering ---------------- */
-
-  const drawKit = useCallback((ctx: CanvasRenderingContext2D, w: number, h: number) => {
-    // rack scaffolding
-    ctx.strokeStyle = CHARCOAL + "0.85)";
-    ctx.lineWidth = Math.max(2, w * 0.0035);
-    ctx.beginPath();
-    ctx.moveTo(w * 0.08, h * 0.94);
-    ctx.lineTo(w * 0.08, h * 0.34);
-    ctx.lineTo(w * 0.92, h * 0.3);
-    ctx.lineTo(w * 0.92, h * 0.94);
-    ctx.stroke();
-
-    for (const piece of DRUM_KIT) {
-      const cx = piece.cx * w;
-      const cy = piece.cy * h;
-      const rx = piece.rx * w;
-      const ry = piece.ry * h;
-      const glow = pieceGlowRef.current[piece.id] ?? 0;
-      pieceGlowRef.current[piece.id] = glow * 0.9;
-
-      // stand
-      if (piece.kind !== "kick") {
-        ctx.strokeStyle = CHARCOAL + "0.75)";
-        ctx.lineWidth = Math.max(1.5, w * 0.002);
-        ctx.beginPath();
-        ctx.moveTo(cx, cy + ry);
-        ctx.lineTo(cx + (cx > w / 2 ? 8 : -8), h * 0.95);
-        ctx.stroke();
-      }
-
-      if (piece.kind === "cymbal") {
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(piece.tilt ?? 0);
-        ctx.fillStyle = BRASS + (0.28 + glow * 0.55).toFixed(3) + ")";
-        ctx.beginPath();
-        ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = CREAM + (0.55 + glow * 0.4).toFixed(3) + ")";
-        ctx.lineWidth = 1.4;
-        ctx.stroke();
-        // lathe grooves
-        for (let i = 1; i <= 3; i++) {
-          ctx.strokeStyle = CHARCOAL + (0.22 + glow * 0.2).toFixed(3) + ")";
-          ctx.beginPath();
-          ctx.ellipse(0, 0, (rx * i) / 4, (ry * i) / 4, 0, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-        ctx.restore();
-      } else {
-        const depth = piece.kind === "kick" ? ry * 0.55 : ry * 1.6;
-        // shell body
-        ctx.fillStyle = COPPER + (0.5 + glow * 0.4).toFixed(3) + ")";
-        ctx.beginPath();
-        ctx.ellipse(cx, cy + depth, rx, ry, 0, 0, Math.PI);
-        ctx.rect(cx - rx, cy, rx * 2, depth);
-        ctx.fill();
-        // head
-        ctx.fillStyle = SIENNA + (0.55 + glow * 0.45).toFixed(3) + ")";
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = CREAM + (0.4 + glow * 0.5).toFixed(3) + ")";
-        ctx.lineWidth = piece.kind === "kick" ? 3 : 2;
-        ctx.stroke();
-        // lugs
-        const lugs = piece.kind === "kick" ? 10 : 8;
-        for (let i = 0; i < lugs; i++) {
-          const a = (i / lugs) * Math.PI * 2;
-          ctx.fillStyle = CHARCOAL + "0.9)";
-          ctx.beginPath();
-          ctx.arc(cx + Math.cos(a) * rx * 0.94, cy + Math.sin(a) * ry * 0.94, 2.4, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        if (piece.kind === "kick") {
-          const k = kickGlowRef.current;
-          kickGlowRef.current = k * 0.88;
-          ctx.strokeStyle = CREAM + (0.15 + k * 0.6).toFixed(3) + ")";
-          ctx.lineWidth = 1.2;
-          ctx.beginPath();
-          ctx.ellipse(cx, cy, rx * 0.55, ry * 0.55, 0, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-      }
-
-      ctx.fillStyle = CREAM + (0.35 + glow * 0.5).toFixed(3) + ")";
-      ctx.font = `${Math.max(9, w * 0.0095)}px system-ui`;
-      ctx.textAlign = "center";
-      ctx.fillText(piece.label.toUpperCase(), cx, cy - ry - 7);
-    }
-  }, []);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -685,7 +623,32 @@ export default function PerformanceStage() {
         ctx.fillText(`${i + 1} · ${CHORD_DEGREE_LABELS[i]}`, x + zoneW / 2, top + h * 0.115);
       }
     } else {
-      drawKit(ctx, w, h);
+      // violin: four bowed strings + degree lanes
+      const glow = violinGlowRef.current;
+      violinGlowRef.current = glow * 0.94;
+      const laneW = (w * 0.9) / VIOLIN_DEGREE_LABELS.length;
+      const top = h * 0.7;
+      for (let i = 0; i < VIOLIN_DEGREE_LABELS.length; i++) {
+        const x = w * 0.05 + i * laneW;
+        const on = i === violinZoneRef.current;
+        ctx.fillStyle = on ? SIENNA + (0.32 + glow * 0.4).toFixed(3) + ")" : CREAM + "0.05)";
+        ctx.fillRect(x + 2, top, laneW - 4, h * 0.22);
+        ctx.strokeStyle = CREAM + (on ? "0.7)" : "0.16)");
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x + 2, top, laneW - 4, h * 0.22);
+        ctx.fillStyle = CREAM + (on ? "0.95)" : "0.5)");
+        ctx.font = `${Math.max(10, w * 0.011)}px system-ui`;
+        ctx.textAlign = "center";
+        ctx.fillText(`${i + 1} · ${VIOLIN_DEGREE_LABELS[i]}`, x + laneW / 2, top + h * 0.125);
+      }
+      // bow-intensity column on the left
+      const inten = violinIntensityRef.current;
+      const barH = h * 0.5;
+      const barY = h * 0.14;
+      ctx.strokeStyle = CREAM + "0.25)";
+      ctx.strokeRect(w * 0.04, barY, 10, barH);
+      ctx.fillStyle = SIENNA + "0.65)";
+      ctx.fillRect(w * 0.04, barY + barH * (1 - inten), 10, barH * inten);
     }
 
     // waveform band
@@ -1168,7 +1131,7 @@ export default function PerformanceStage() {
                 [
                   ["piano", "Minimalist Grand"],
                   ["guitar", "Acoustic"],
-                  ["drums", "Infernal Pulse"],
+                  ["violin", "Aura Violin"],
                   ["chords", "Aura Chords"],
                 ] as [InstrumentKind, string][]
               ).map(([kind, label]) => (
@@ -1240,10 +1203,11 @@ export default function PerformanceStage() {
                 Pinch with your left hand and move it vertically to fret. Sweep your right hand
                 across the strings to strum.
               </p>
-            ) : instrument === "drums" ? (
+            ) : instrument === "violin" ? (
               <p>
-                Hover a hand over a drum or cymbal and make a sharp downward strike. Pump both
-                hands down together low in the frame to fire the double kicks.
+                Right hand fingers the note: one to five raised fingers pick the degree and tilting
+                clockwise past 18° lifts it an octave. Left hand is the bow — raise it to press
+                harder for a louder, brighter tone.
               </p>
             ) : (
               <p>
@@ -1257,8 +1221,8 @@ export default function PerformanceStage() {
           <div className="mt-auto">
             <p className="text-[0.7rem] tracking-[0.3em] text-cream/60 uppercase">Now sounding</p>
             <p className="liquid-type font-display text-4xl">
-              {instrument === "drums"
-                ? (lastHit ?? "—")
+              {instrument === "violin"
+                ? (violinState.label ?? "—")
                 : instrument === "chords"
                   ? (chordState.label ?? "—")
                   : (activeNote ?? "—")}
@@ -1348,22 +1312,42 @@ export default function PerformanceStage() {
             </div>
           </div>
         ) : (
-          <div className="panel grid grid-cols-3 gap-2 rounded-3xl p-5 sm:grid-cols-5 lg:grid-cols-8">
-            {DRUM_KIT.map((p) => (
-              <motion.div
-                key={p.id}
-                animate={{ opacity: lastHit === p.label ? 1 : 0.7 }}
-                className={`rounded-2xl border px-3 py-4 text-center text-[0.6rem] tracking-[0.18em] uppercase transition-colors duration-300 ${
-                  lastHit === p.label
-                    ? "border-cream/60 bg-sienna text-cream"
-                    : p.kind === "cymbal"
-                      ? "border-cream/30 bg-cream/10 text-cream/80"
-                      : "border-cream/20 bg-charcoal/60 text-cream/70"
-                }`}
-              >
-                {p.label}
-              </motion.div>
-            ))}
+          <div className="panel flex flex-col gap-5 rounded-3xl p-6">
+            <div className="grid grid-cols-5 gap-2">
+              {VIOLIN_DEGREE_LABELS.map((deg, i) => {
+                const active = violinState.fingers === i + 1;
+                return (
+                  <motion.div
+                    key={deg}
+                    animate={{ opacity: active ? 1 : 0.6, y: active ? -4 : 0 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 24 }}
+                    className={`rounded-2xl border px-3 py-5 text-center transition-colors duration-300 ${
+                      active
+                        ? "border-cream/60 bg-sienna text-cream"
+                        : "border-cream/20 bg-charcoal/50 text-cream/70"
+                    }`}
+                  >
+                    <p className="liquid-type font-display text-2xl">
+                      {violinNote(i + 1, active ? violinState.register : "low")}
+                    </p>
+                    <p className="mt-1 text-[0.6rem] tracking-[0.25em] uppercase">
+                      {i + 1} finger{i ? "s" : ""} · {deg}
+                    </p>
+                  </motion.div>
+                );
+              })}
+            </div>
+            <div className="flex flex-wrap items-center gap-6 text-[0.65rem] tracking-[0.22em] text-cream/70 uppercase">
+              <span>
+                register <span className="text-cream">{violinState.register}</span>
+              </span>
+              <span>
+                tilt <span className="text-cream">{violinState.tilt.toFixed(0)}°</span>
+              </span>
+              <span>
+                bow <span className="text-cream">{Math.round(violinState.intensity * 100)}%</span>
+              </span>
+            </div>
           </div>
         )}
       </section>
