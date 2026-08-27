@@ -74,10 +74,10 @@ function Landing() {
         <div className="max-w-3xl">
           <motion.h1
             {...rise(0.2)}
-            className="font-display text-[clamp(3.5rem,11vw,9rem)] leading-[0.9] text-cream"
+            className="liquid-type font-display text-[clamp(3.5rem,11vw,9rem)] leading-[0.9] tracking-[0.02em]"
           >
             Aura
-            <motion.span {...rise(0.38)} className="block pl-[0.12em] italic text-cream/80">
+            <motion.span {...rise(0.38)} className="liquid-type block pl-[0.12em] italic">
               Harmony
             </motion.span>
           </motion.h1>
