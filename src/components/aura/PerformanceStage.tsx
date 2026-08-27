@@ -1061,7 +1061,7 @@ export default function PerformanceStage() {
                   </p>
                   <button
                     onClick={() => begin(false)}
-                    className="glass-btn glass-btn-accent rounded-full px-10 py-3 text-sm tracking-[0.3em] text-cream uppercase hover:scale-105"
+                    className="glass-btn glass-btn-accent liquid-glass rounded-full px-10 py-3 text-sm tracking-[0.3em] text-cream uppercase hover:scale-105"
                   >
                     start
                   </button>
