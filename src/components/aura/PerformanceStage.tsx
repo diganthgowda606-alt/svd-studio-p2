@@ -137,6 +137,8 @@ export default function PerformanceStage() {
   const chordKeyRef = useRef<string>("");
   const chordZoneRef = useRef(-1);
   const chordGlowRef = useRef(0);
+  const volumeHandRef = useRef<number | null>(null);
+  const volumePushRef = useRef(0);
 
   const calRef = useRef<Calibration>(DEFAULT_CALIBRATION);
   const calPhaseRef = useRef<CalPhase>("none");
