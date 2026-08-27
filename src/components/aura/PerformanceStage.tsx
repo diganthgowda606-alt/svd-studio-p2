@@ -210,6 +210,24 @@ export default function PerformanceStage() {
     setToneColor(toneColor);
   }, [toneColor]);
 
+  useEffect(() => {
+    if (!recording) return;
+    const id = window.setInterval(() => setRecSeconds((s) => s + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [recording]);
+
+  const toggleRecording = useCallback(async () => {
+    if (recording) {
+      setRecording(false);
+      await stopRecording("aura-harmony");
+      return;
+    }
+    if (!isAudioStarted()) await startAudio();
+    setRecSeconds(0);
+    await startRecording();
+    setRecording(true);
+  }, [recording]);
+
   // release any sustained chord when leaving chord mode
   useEffect(() => {
     if (instrument !== "violin") {
