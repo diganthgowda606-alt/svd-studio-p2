@@ -1254,7 +1254,7 @@ export default function PerformanceStage() {
 
           <div className="mt-auto">
             <p className="text-[0.7rem] tracking-[0.3em] text-cream/60 uppercase">Now sounding</p>
-            <p className="font-display text-4xl text-cream">
+            <p className="liquid-type font-display text-4xl">
               {instrument === "drums"
                 ? (lastHit ?? "—")
                 : instrument === "chords"
