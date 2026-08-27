@@ -200,9 +200,17 @@
 }
 
 @utility panel {
-  background: color-mix(in oklab, var(--greige-deep) 88%, var(--charcoal));
-  border: 1px solid color-mix(in oklab, var(--cream) 22%, transparent);
-  backdrop-filter: blur(8px);
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--greige-deep) 72%, var(--charcoal)),
+    color-mix(in oklab, var(--charcoal) 46%, transparent)
+  );
+  border: 1px solid color-mix(in oklab, var(--cream) 26%, transparent);
+  backdrop-filter: blur(16px) saturate(145%);
+  box-shadow:
+    0 14px 40px -18px color-mix(in oklab, var(--charcoal) 65%, transparent),
+    inset 0 1px 0 color-mix(in oklab, var(--cream) 26%, transparent);
 }
 
 @utility glass {
