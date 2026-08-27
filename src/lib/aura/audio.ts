@@ -138,6 +138,42 @@ export function stopViolin() {
   violinNote = null;
 }
 
+/* ---- recording ---- */
+
+let recorder: Tone.Recorder | null = null;
+let recording = false;
+
+export function isRecording() {
+  return recording;
+}
+
+export async function startRecording() {
+  if (!volumeNode || recording) return;
+  if (!recorder) {
+    recorder = new Tone.Recorder();
+    volumeNode.connect(recorder);
+  }
+  await recorder.start();
+  recording = true;
+}
+
+/** stops recording and triggers a download of the performance */
+export async function stopRecording(filename = "aura-harmony") {
+  if (!recorder || !recording) return null;
+  const blob = await recorder.stop();
+  recording = false;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const ext = blob.type.includes("ogg") ? "ogg" : "webm";
+  a.download = `${filename}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.${ext}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return blob;
+}
+
 export function getWaveform(): Float32Array | null {
   if (!analyser) return null;
   return analyser.getValue() as Float32Array;
