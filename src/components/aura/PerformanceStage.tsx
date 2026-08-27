@@ -1323,6 +1323,9 @@ export default function PerformanceStage() {
                     <p className="mt-1 text-[0.6rem] tracking-[0.25em] uppercase">
                       {i + 1} finger{i ? "s" : ""} · {deg}
                     </p>
+                    <p className="mt-2 text-[0.55rem] tracking-[0.18em] text-cream/60 uppercase">
+                      flat {violinNote(i + 1, "low")} · tilt {violinNote(i + 1, "high")}
+                    </p>
                   </motion.div>
                 );
               })}
