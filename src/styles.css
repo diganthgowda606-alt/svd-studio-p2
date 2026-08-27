@@ -64,13 +64,13 @@
 :root {
   --radius: 1rem;
 
-  /* Aura Harmony palette — warm minimalist interior */
-  --greige: oklch(0.74 0.021 82);
-  --greige-deep: oklch(0.66 0.023 80);
-  --cream: oklch(0.951 0.014 85);
-  --charcoal: oklch(0.315 0.012 62);
-  --sienna: oklch(0.405 0.084 45);
-  --walnut: oklch(0.33 0.038 55);
+  /* Aura Harmony palette — purple salon over warm brown */
+  --greige: oklch(0.185 0.045 305);
+  --greige-deep: oklch(0.145 0.038 303);
+  --cream: oklch(0.955 0.015 70);
+  --charcoal: oklch(0.245 0.032 42);
+  --sienna: oklch(0.5 0.115 45);
+  --walnut: oklch(0.47 0.18 300);
 
   --background: var(--greige);
   --foreground: var(--cream);
@@ -82,8 +82,8 @@
   --primary-foreground: var(--cream);
   --secondary: var(--charcoal);
   --secondary-foreground: var(--cream);
-  --muted: oklch(0.7 0.02 82);
-  --muted-foreground: oklch(0.88 0.014 85);
+  --muted: oklch(0.26 0.04 302);
+  --muted-foreground: oklch(0.86 0.02 70);
   --accent: var(--walnut);
   --accent-foreground: var(--cream);
   --destructive: oklch(0.5 0.12 30);
@@ -254,7 +254,8 @@
     background: color-mix(in oklab, var(--charcoal) 42%, transparent);
     border-color: color-mix(in oklab, var(--cream) 40%, transparent);
     box-shadow:
-      0 0 26px -4px color-mix(in oklab, var(--sienna) 60%, transparent),
+      0 0 26px -4px color-mix(in oklab, var(--walnut) 70%, transparent),
+      0 0 44px -10px color-mix(in oklab, var(--sienna) 60%, transparent),
       inset 0 1px 0 color-mix(in oklab, var(--cream) 34%, transparent);
     transform: translateY(-1px);
   }
@@ -268,10 +269,15 @@
 }
 
 @utility glass-btn-accent {
-  background: color-mix(in oklab, var(--sienna) 52%, transparent);
+  background: linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--walnut) 60%, transparent),
+    color-mix(in oklab, var(--sienna) 62%, transparent)
+  );
   border-color: color-mix(in oklab, var(--cream) 36%, transparent);
   box-shadow:
-    0 0 30px -6px color-mix(in oklab, var(--sienna) 70%, transparent),
+    0 0 30px -6px color-mix(in oklab, var(--walnut) 70%, transparent),
+    0 0 48px -12px color-mix(in oklab, var(--sienna) 60%, transparent),
     inset 0 1px 0 color-mix(in oklab, var(--cream) 32%, transparent);
 }
 
