@@ -1322,7 +1322,7 @@ export default function PerformanceStage() {
                         : "border-cream/20 bg-charcoal/50 text-cream/70"
                     }`}
                   >
-                    <p className="font-display text-2xl">
+                    <p className="liquid-type font-display text-2xl">
                       {chordLabel(root, active ? chordState.quality : "major")}
                     </p>
                     <p className="mt-1 text-[0.6rem] tracking-[0.25em] uppercase">
