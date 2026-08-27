@@ -440,10 +440,33 @@ export default function PerformanceStage() {
     [strikePiece],
   );
 
-  /** finger count picks the chord root, hand tilt picks major / minor */
+  /** right hand: finger count + tilt pick the chord. left hand: height sets volume */
   const analyseChords = useCallback(
     (hands: Hand[], w: number, h: number) => {
-      const hand = hands[0];
+      // mirrored preview: the user's right hand appears on the right of the frame
+      const sorted = [...hands].sort(
+        (a, b) => (1 - (a.palm?.x ?? 0.5)) - (1 - (b.palm?.x ?? 0.5)),
+      );
+      const leftHand = sorted.length > 1 ? sorted[0] : null;
+      const rightHand = sorted.length > 1 ? sorted[1] : sorted[0];
+
+      // ---- left hand: volume fader (raise hand = louder) ----
+      if (leftHand) {
+        const wrist = leftHand.landmarks[0];
+        if (wrist) {
+          const v = Math.min(1, Math.max(0, (0.85 - wrist.y) / 0.6));
+          volumeHandRef.current = v;
+          const now = performance.now();
+          if (now - volumePushRef.current > 90) {
+            volumePushRef.current = now;
+            setVolume((prev) => (Math.abs(prev - v) > 0.01 ? v : prev));
+          }
+        }
+      } else {
+        volumeHandRef.current = null;
+      }
+
+      const hand = rightHand;
       if (!hand) {
         if (chordKeyRef.current) {
           stopChord();
@@ -485,6 +508,7 @@ export default function PerformanceStage() {
     },
     [addRipple],
   );
+
 
   const analyse = useCallback(
     (hands: Hand[], w: number, h: number, dt: number) => {
