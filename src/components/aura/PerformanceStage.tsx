@@ -47,12 +47,17 @@ import {
   type CalibrationSamples,
 } from "@/lib/aura/calibration";
 
-type Ripple = { x: number; y: number; r: number; max: number; tone: "sienna" | "charcoal" | "cream" };
+type Ripple = {
+  x: number;
+  y: number;
+  r: number;
+  max: number;
+  tone: "sienna" | "charcoal" | "cream";
+};
 
 const CREAM = "rgba(243, 236, 224, ";
 const CHARCOAL = "rgba(60, 53, 45, ";
 const SIENNA = "rgba(122, 60, 35, ";
-const COPPER = "rgba(154, 84, 48, ";
 const BRASS = "rgba(226, 214, 190, ";
 
 const FINGER_TIPS = [4, 8, 12, 16, 20];
@@ -86,7 +91,6 @@ const CONNECTIONS: [number, number][] = [
   [0, 17],
 ];
 
-type HandMotion = { y: number; vy: number; lastStrike: number };
 type TipMotion = { y: number; vy: number };
 
 /** live calibration diagnostics shown in the on-screen overlay */
@@ -101,19 +105,16 @@ type CalDiag = {
   samples: number;
 };
 
-
 /** gesture timing constants (ms) — debounce windows keep triggers from chattering */
 const FINGER_REFRACTORY = 110; // same finger can't retrigger faster than this
 const KEY_REFRACTORY = 70; // same note can't retrigger faster than this
 const STRING_REFRACTORY = 190;
-const PIECE_REFRACTORY = 95; // same drum/cymbal
 const HAND_REFRACTORY = 105; // same hand
 /** velocity smoothing factor per 16.7ms frame (higher = snappier, noisier) */
 const VEL_SMOOTH = 0.45;
 
 /** frame-rate independent exponential blend */
 const blend = (a: number, dt: number) => 1 - Math.pow(1 - a, Math.min(3, dt / 16.667));
-
 
 export default function PerformanceStage() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -128,7 +129,6 @@ export default function PerformanceStage() {
   const [stringPulse, setStringPulse] = useState<Record<number, number>>({});
   const [handsSeen, setHandsSeen] = useState(0);
   const [fingersTracked, setFingersTracked] = useState(0);
-  const [lastHit, setLastHit] = useState<string | null>(null);
   const [calPhase, setCalPhase] = useState<CalPhase>("none");
   const [calProgress, setCalProgress] = useState(0);
   const [calibrated, setCalibrated] = useState(false);
@@ -171,7 +171,6 @@ export default function PerformanceStage() {
   const calDiagPushRef = useRef(0);
   const smoothRef = useRef<Record<number, { x: number; y: number; z: number }[]>>({});
 
-
   const instrumentRef = useRef(instrument);
   instrumentRef.current = instrument;
 
@@ -194,14 +193,10 @@ export default function PerformanceStage() {
   // guitar strum velocity
   const strumMotionRef = useRef<{ x: number; y: number; v: number } | null>(null);
 
-  // drums
-  const handMotionRef = useRef<Record<number, HandMotion>>({});
+  // violin
   const pieceLastHitRef = useRef<Record<string, number>>({});
-  const pieceGlowRef = useRef<Record<string, number>>({});
-  const kickGlowRef = useRef(0);
   const lastKickRef = useRef(0);
   const lastFrameRef = useRef(0);
-
 
   useEffect(() => {
     setMasterVolume(volume);
@@ -400,9 +395,7 @@ export default function PerformanceStage() {
   /** right hand: finger count picks the degree, tilt lifts the octave. left hand bows intensity */
   const analyseViolin = useCallback(
     (hands: Hand[], w: number, h: number) => {
-      const sorted = [...hands].sort(
-        (a, b) => (1 - (a.palm?.x ?? 0.5)) - (1 - (b.palm?.x ?? 0.5)),
-      );
+      const sorted = [...hands].sort((a, b) => 1 - (a.palm?.x ?? 0.5) - (1 - (b.palm?.x ?? 0.5)));
       const leftHand = sorted.length > 1 ? sorted[0] : null;
       const rightHand = sorted.length > 1 ? sorted[1] : sorted[0];
 
@@ -416,7 +409,9 @@ export default function PerformanceStage() {
           const now = performance.now();
           if (now - violinPushRef.current > 110) {
             violinPushRef.current = now;
-            setViolinState((st) => (Math.abs(st.intensity - v) > 0.02 ? { ...st, intensity: v } : st));
+            setViolinState((st) =>
+              Math.abs(st.intensity - v) > 0.02 ? { ...st, intensity: v } : st,
+            );
           }
         }
       } else {
@@ -475,9 +470,7 @@ export default function PerformanceStage() {
   const analyseChords = useCallback(
     (hands: Hand[], w: number, h: number) => {
       // mirrored preview: the user's right hand appears on the right of the frame
-      const sorted = [...hands].sort(
-        (a, b) => (1 - (a.palm?.x ?? 0.5)) - (1 - (b.palm?.x ?? 0.5)),
-      );
+      const sorted = [...hands].sort((a, b) => 1 - (a.palm?.x ?? 0.5) - (1 - (b.palm?.x ?? 0.5)));
       const leftHand = sorted.length > 1 ? sorted[0] : null;
       const rightHand = sorted.length > 1 ? sorted[1] : sorted[0];
 
@@ -540,7 +533,6 @@ export default function PerformanceStage() {
     [addRipple],
   );
 
-
   const analyse = useCallback(
     (hands: Hand[], w: number, h: number, dt: number) => {
       if (instrumentRef.current === "piano") analysePiano(hands, w, h, dt);
@@ -550,7 +542,6 @@ export default function PerformanceStage() {
     },
     [analyseChords, analyseViolin, analyseGuitar, analysePiano],
   );
-
 
   /* ---------------- rendering ---------------- */
 
@@ -793,8 +784,7 @@ export default function PerformanceStage() {
         ctx.fillText("REST", x0 + 4, y - 4);
       }
     }
-  }, [drawKit]);
-
+  }, []);
 
   /** exponential smoothing of landmarks — removes tracker jitter before any trigger test */
   const smoothHands = useCallback((hands: Hand[]) => {
@@ -814,7 +804,13 @@ export default function PerformanceStage() {
       smoothRef.current[i] = hand.landmarks.map((p) => ({ ...p }));
       const thumb = hand.landmarks[4]!;
       const index = hand.landmarks[8]!;
-      const span = Math.max(Math.hypot(hand.landmarks[0]!.x - hand.landmarks[9]!.x, hand.landmarks[0]!.y - hand.landmarks[9]!.y), 0.001);
+      const span = Math.max(
+        Math.hypot(
+          hand.landmarks[0]!.x - hand.landmarks[9]!.x,
+          hand.landmarks[0]!.y - hand.landmarks[9]!.y,
+        ),
+        0.001,
+      );
       hand.pinch = Math.hypot(thumb.x - index.x, thumb.y - index.y) / span;
       hand.pinchPoint = { x: (thumb.x + index.x) / 2, y: (thumb.y + index.y) / 2, z: 0 };
       hand.palm = hand.landmarks[9]!;
@@ -879,7 +875,6 @@ export default function PerformanceStage() {
 
     if (elapsed < total) return;
 
-
     if (phase === "rest") {
       calPhaseRef.current = "press";
       calStartRef.current = now;
@@ -907,10 +902,7 @@ export default function PerformanceStage() {
     if (video && landmarker && video.readyState >= 2) {
       try {
         const res = landmarker.detectForVideo(video, nowTs);
-        const hands = buildHands(
-          (res.landmarks ?? []) as never,
-          (res.handedness ?? []) as never,
-        );
+        const hands = buildHands((res.landmarks ?? []) as never, (res.handedness ?? []) as never);
         smoothHands(hands);
         handsRef.current = hands;
         setHandsSeen(hands.length);
@@ -920,7 +912,6 @@ export default function PerformanceStage() {
           if (phase === "rest" || phase === "press") sampleCalibration(hands);
           else analyse(hands, canvas.width, canvas.height, dt);
         }
-
       } catch {
         /* frame skipped */
       }
@@ -940,45 +931,48 @@ export default function PerformanceStage() {
     setStatus("calibrating…");
   }, []);
 
-  const begin = useCallback(async (recalibrate = false) => {
-    setStatus("waking the room…");
-    setCalProgress(0);
-    try {
-      await startAudio();
-      setMasterVolume(volume);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: 960, height: 540, facingMode: "user" },
-        audio: false,
-      });
-      const video = videoRef.current;
-      if (!video) return;
-      video.srcObject = stream;
-      await video.play();
-      const canvas = canvasRef.current;
-      if (canvas) {
-        canvas.width = video.videoWidth || 960;
-        canvas.height = video.videoHeight || 540;
-      }
-      setStatus("listening for hands…");
-      landmarkerRef.current = await createHandLandmarker();
-      setRunning(true);
+  const begin = useCallback(
+    async (recalibrate = false) => {
+      setStatus("waking the room…");
+      setCalProgress(0);
+      try {
+        await startAudio();
+        setMasterVolume(volume);
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 960, height: 540, facingMode: "user" },
+          audio: false,
+        });
+        const video = videoRef.current;
+        if (!video) return;
+        video.srcObject = stream;
+        await video.play();
+        const canvas = canvasRef.current;
+        if (canvas) {
+          canvas.width = video.videoWidth || 960;
+          canvas.height = video.videoHeight || 540;
+        }
+        setStatus("listening for hands…");
+        landmarkerRef.current = await createHandLandmarker();
+        setRunning(true);
 
-      const saved = loadCalibration();
-      if (saved && !recalibrate) {
-        calRef.current = saved;
-        calPhaseRef.current = "done";
-        setCalPhase("done");
-        setCalibrated(true);
-        setStatus("live");
-      } else {
-        startCalibration();
+        const saved = loadCalibration();
+        if (saved && !recalibrate) {
+          calRef.current = saved;
+          calPhaseRef.current = "done";
+          setCalPhase("done");
+          setCalibrated(true);
+          setStatus("live");
+        } else {
+          startCalibration();
+        }
+        rafRef.current = requestAnimationFrame(loop);
+      } catch (err) {
+        console.error(err);
+        setStatus("camera unavailable — allow webcam access and try again");
       }
-      rafRef.current = requestAnimationFrame(loop);
-    } catch (err) {
-      console.error(err);
-      setStatus("camera unavailable — allow webcam access and try again");
-    }
-  }, [loop, startCalibration, volume]);
+    },
+    [loop, startCalibration, volume],
+  );
 
   useEffect(() => {
     return () => {
@@ -1007,9 +1001,7 @@ export default function PerformanceStage() {
           <h1 className="liquid-type font-display text-4xl tracking-[0.18em] uppercase">
             Aura Harmony
           </h1>
-          <p className="mt-1 text-sm tracking-widest text-cream/70 uppercase">
-            performance space
-          </p>
+          <p className="mt-1 text-sm tracking-widest text-cream/70 uppercase">performance space</p>
         </div>
         <div className="text-right text-xs tracking-[0.2em] text-cream/70 uppercase">
           <p>{status}</p>
@@ -1081,7 +1073,9 @@ export default function PerformanceStage() {
                     />
                   </div>
                   <p className="text-[0.65rem] tracking-[0.3em] text-cream/55 uppercase">
-                    {handsSeen ? `${handsSeen} hand${handsSeen === 1 ? "" : "s"} detected` : "show your hands"}
+                    {handsSeen
+                      ? `${handsSeen} hand${handsSeen === 1 ? "" : "s"} detected`
+                      : "show your hands"}
                   </p>
                 </motion.div>
               )}
@@ -1098,8 +1092,7 @@ export default function PerformanceStage() {
                 >
                   <p className="mb-1 tracking-[0.3em] text-cream/55 uppercase">diagnostics</p>
                   <p>
-                    <span className="text-sienna">press plane</span>{" "}
-                    {calDiag.pressY.toFixed(3)}
+                    <span className="text-sienna">press plane</span> {calDiag.pressY.toFixed(3)}
                   </p>
                   <p>release {calDiag.releaseY.toFixed(3)}</p>
                   <p>hysteresis gap {(calDiag.pressY - calDiag.releaseY).toFixed(3)}</p>
@@ -1107,8 +1100,7 @@ export default function PerformanceStage() {
                   <p>jitter {calDiag.jitter.toFixed(4)}</p>
                   <p>peak vel {calDiag.peakVel.toFixed(4)}</p>
                   <p>
-                    tip depth{" "}
-                    {calDiag.deepestY !== null ? calDiag.deepestY.toFixed(3) : "—"}
+                    tip depth {calDiag.deepestY !== null ? calDiag.deepestY.toFixed(3) : "—"}
                     {calDiag.deepestY !== null && calDiag.deepestY > calDiag.pressY ? (
                       <span className="text-sienna"> · below</span>
                     ) : null}
@@ -1117,7 +1109,6 @@ export default function PerformanceStage() {
                 </motion.div>
               )}
             </AnimatePresence>
-
           </div>
         </div>
 
@@ -1300,8 +1291,7 @@ export default function PerformanceStage() {
             </div>
             <div className="flex flex-wrap items-center gap-6 text-[0.65rem] tracking-[0.22em] text-cream/70 uppercase">
               <span>
-                quality{" "}
-                <span className="text-cream">{chordState.quality}</span>
+                quality <span className="text-cream">{chordState.quality}</span>
               </span>
               <span>
                 tilt <span className="text-cream">{chordState.tilt.toFixed(0)}°</span>

@@ -159,8 +159,7 @@ export function setToneColor(value: number) {
 /** hold a chord; retriggers only the notes that changed */
 export function playChord(notes: string[], velocity = 0.6) {
   if (!pad) return;
-  const same =
-    notes.length === padNotes.length && notes.every((n, i) => n === padNotes[i]);
+  const same = notes.length === padNotes.length && notes.every((n, i) => n === padNotes[i]);
   if (same) return;
   const release = padNotes.filter((n) => !notes.includes(n));
   const attack = notes.filter((n) => !padNotes.includes(n));
