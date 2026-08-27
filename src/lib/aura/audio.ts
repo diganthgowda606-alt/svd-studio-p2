@@ -46,7 +46,7 @@ export async function startAudio() {
   await Tone.start();
   Tone.getContext().lookAhead = 0.01;
 
-  volumeNode = new Tone.Volume(-6).toDestination();
+  volumeNode = new Tone.Volume(0).toDestination();
   analyser = new Tone.Analyser("waveform", 512);
   volumeNode.connect(analyser);
 
@@ -88,7 +88,7 @@ export async function startAudio() {
     envelope: { attack: 0.16, decay: 0.2, sustain: 0.9, release: 0.5 },
     modulationEnvelope: { attack: 0.3, decay: 0.2, sustain: 0.7, release: 0.4 },
   }).connect(violinFilter);
-  violin.volume.value = -12;
+  violin.volume.value = -2;
 
   started = true;
 }
@@ -115,7 +115,7 @@ export function pluckGuitar(note: string, velocity = 0.8) {
 /** bow intensity 0..1 -> loudness, brightness and vibrato depth */
 export function setViolinIntensity(value: number) {
   const v = Math.min(1, Math.max(0, value));
-  if (violin) violin.volume.rampTo(-26 + v * 20, 0.12);
+  if (violin) violin.volume.rampTo(-14 + v * 16, 0.12);
   if (violinFilter) violinFilter.frequency.rampTo(700 + v * 4200, 0.12);
   if (violinVibrato) violinVibrato.depth.rampTo(0.05 + v * 0.22, 0.2);
 }
