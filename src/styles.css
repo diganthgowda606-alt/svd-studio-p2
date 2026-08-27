@@ -105,7 +105,9 @@
   --sidebar-border: oklch(0.951 0.014 85 / 24%);
   --sidebar-ring: var(--cream);
 
-  --font-display: "Cormorant Garamond", Georgia, serif;
+  /* AVONE stand-in: high-contrast modern stencil-like serif */
+  --font-display: "Bodoni Moda", "Cormorant Garamond", Georgia, serif;
+  /* Ameda stand-in: elegant modern sans for smaller text */
   --font-body: "Jost", ui-sans-serif, system-ui, sans-serif;
 }
 
