@@ -137,6 +137,8 @@ export default function PerformanceStage() {
   const [flowIn, setFlowIn] = useState(false);
   const [calDiag, setCalDiag] = useState<CalDiag | null>(null);
   const [toneColor, setToneColorState] = useState(0.5);
+  const [recording, setRecording] = useState(false);
+  const [recSeconds, setRecSeconds] = useState(0);
   const [chordState, setChordState] = useState<{
     fingers: number;
     quality: ChordQuality;
