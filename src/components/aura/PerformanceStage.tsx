@@ -793,7 +793,7 @@ export default function PerformanceStage() {
         ctx.fillText("REST", x0 + 4, y - 4);
       }
     }
-  }, [drawKit]);
+  }, []);
 
 
   /** exponential smoothing of landmarks — removes tracker jitter before any trigger test */
