@@ -64,13 +64,13 @@
 :root {
   --radius: 1rem;
 
-  /* Aura Harmony palette — warm minimalist interior */
-  --greige: oklch(0.74 0.021 82);
-  --greige-deep: oklch(0.66 0.023 80);
-  --cream: oklch(0.951 0.014 85);
-  --charcoal: oklch(0.315 0.012 62);
-  --sienna: oklch(0.405 0.084 45);
-  --walnut: oklch(0.33 0.038 55);
+  /* Aura Harmony palette — purple salon over warm brown */
+  --greige: oklch(0.185 0.045 305);
+  --greige-deep: oklch(0.145 0.038 303);
+  --cream: oklch(0.955 0.015 70);
+  --charcoal: oklch(0.245 0.032 42);
+  --sienna: oklch(0.5 0.115 45);
+  --walnut: oklch(0.47 0.18 300);
 
   --background: var(--greige);
   --foreground: var(--cream);
