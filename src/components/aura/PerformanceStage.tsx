@@ -1041,7 +1041,9 @@ export default function PerformanceStage() {
     >
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl tracking-[0.18em] text-cream uppercase">Aura Harmony</h1>
+          <h1 className="liquid-type font-display text-4xl tracking-[0.18em] uppercase">
+            Aura Harmony
+          </h1>
           <p className="mt-1 text-sm tracking-widest text-cream/70 uppercase">
             performance space
           </p>
@@ -1322,7 +1324,7 @@ export default function PerformanceStage() {
                         : "border-cream/20 bg-charcoal/50 text-cream/70"
                     }`}
                   >
-                    <p className="font-display text-2xl">
+                    <p className="liquid-type font-display text-2xl">
                       {chordLabel(root, active ? chordState.quality : "major")}
                     </p>
                     <p className="mt-1 text-[0.6rem] tracking-[0.25em] uppercase">
