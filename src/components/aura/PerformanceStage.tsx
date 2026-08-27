@@ -1245,8 +1245,9 @@ export default function PerformanceStage() {
               </p>
             ) : (
               <p>
-                Hold up one to five fingers to choose a chord, then tilt your hand clockwise past
-                18° to bend it minor and back upright for major. Tone shapes the pad's colour.
+                Right hand plays the tune: hold up one to five fingers to choose a chord and tilt
+                clockwise past 18° for minor. Left hand is the volume fader — raise it to swell,
+                lower it to fade.
               </p>
             )}
           </div>
