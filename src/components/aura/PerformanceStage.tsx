@@ -17,6 +17,8 @@ import {
   startAudio,
   transpose,
   getWaveform,
+  startRecording,
+  stopRecording,
   type InstrumentKind,
 } from "@/lib/aura/audio";
 import {
@@ -135,6 +137,8 @@ export default function PerformanceStage() {
   const [flowIn, setFlowIn] = useState(false);
   const [calDiag, setCalDiag] = useState<CalDiag | null>(null);
   const [toneColor, setToneColorState] = useState(0.5);
+  const [recording, setRecording] = useState(false);
+  const [recSeconds, setRecSeconds] = useState(0);
   const [chordState, setChordState] = useState<{
     fingers: number;
     quality: ChordQuality;
@@ -205,6 +209,24 @@ export default function PerformanceStage() {
   useEffect(() => {
     setToneColor(toneColor);
   }, [toneColor]);
+
+  useEffect(() => {
+    if (!recording) return;
+    const id = window.setInterval(() => setRecSeconds((s) => s + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [recording]);
+
+  const toggleRecording = useCallback(async () => {
+    if (recording) {
+      setRecording(false);
+      await stopRecording("aura-harmony");
+      return;
+    }
+    if (!isAudioStarted()) await startAudio();
+    setRecSeconds(0);
+    await startRecording();
+    setRecording(true);
+  }, [recording]);
 
   // release any sustained chord when leaving chord mode
   useEffect(() => {
@@ -1039,7 +1061,7 @@ export default function PerformanceStage() {
                   </p>
                   <button
                     onClick={() => begin(false)}
-                    className="glass-btn glass-btn-accent rounded-full px-10 py-3 text-sm tracking-[0.3em] text-cream uppercase hover:scale-105"
+                    className="glass-btn glass-btn-accent liquid-glass rounded-full px-10 py-3 text-sm tracking-[0.3em] text-cream uppercase hover:scale-105"
                   >
                     start
                   </button>
@@ -1155,6 +1177,28 @@ export default function PerformanceStage() {
             >
               recalibrate
             </button>
+          </div>
+
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-[0.7rem] tracking-[0.3em] text-cream/70 uppercase">Record</p>
+              <span className="text-[0.6rem] tracking-[0.2em] text-cream/50 uppercase">
+                {recording
+                  ? `${String(Math.floor(recSeconds / 60)).padStart(2, "0")}:${String(recSeconds % 60).padStart(2, "0")}`
+                  : "idle"}
+              </span>
+            </div>
+            <button
+              onClick={() => void toggleRecording()}
+              className={`glass-btn liquid-glass w-full rounded-full px-4 py-2 text-[0.65rem] tracking-[0.25em] uppercase ${
+                recording ? "glass-btn-accent text-cream" : "text-cream/80 hover:text-cream"
+              }`}
+            >
+              {recording ? "stop & save" : "record performance"}
+            </button>
+            <p className="mt-2 text-[0.6rem] leading-relaxed tracking-wide text-cream/50">
+              Saves an audio file of your performance to your device.
+            </p>
           </div>
 
           <div>
