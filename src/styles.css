@@ -326,6 +326,8 @@
 @utility liquid-type {
   position: relative;
   color: color-mix(in oklab, var(--cream) 92%, var(--sienna));
+  -webkit-text-stroke: 0.55px color-mix(in oklab, var(--cream) 78%, var(--sienna));
+  paint-order: stroke fill;
   background-image: linear-gradient(
     115deg,
     var(--cream) 0%,
@@ -338,11 +340,11 @@
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  /* dark under-stroke keeps every letter readable against the glowing waves,
-     warm glow preserves the liquid sheen */
-  filter: drop-shadow(0 1px 1px color-mix(in oklab, var(--greige-deep) 85%, transparent))
-    drop-shadow(0 3px 14px color-mix(in oklab, var(--greige-deep) 70%, transparent))
-    drop-shadow(0 0 22px color-mix(in oklab, var(--cream) 38%, transparent));
+  /* text-shadow remains active while Motion animates its own filter property. */
+  text-shadow:
+    0 1px 1px color-mix(in oklab, var(--greige-deep) 92%, transparent),
+    0 3px 12px color-mix(in oklab, var(--greige-deep) 82%, transparent),
+    0 0 20px color-mix(in oklab, var(--cream) 34%, transparent);
   animation: liquid-sheen 9s ease-in-out infinite;
 }
 
