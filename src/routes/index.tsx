@@ -22,16 +22,45 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Aura Harmony turns webcam hand gestures into a grand piano and acoustic guitar — a warm, minimal instrument you play in the air.",
+          "Aura Harmony is a free gesture-controlled instrument: play piano, guitar, chords and violin in your browser with webcam hand tracking. No hardware needed.",
+      },
+      {
+        name: "keywords",
+        content:
+          "Aura Harmony, gesture controlled instrument, hand tracking music, webcam piano, air guitar, web audio instrument, play music with hands",
       },
       { property: "og:title", content: "Aura Harmony — Play Music With Your Hands" },
       {
         property: "og:description",
         content:
-          "A gesture-controlled piano and guitar in the browser, built with hand tracking and low-latency synthesis.",
+          "A gesture-controlled piano, guitar, chord pad and violin in the browser, built with hand tracking and low-latency synthesis.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://svd-studio-p2.lovable.app/" },
+      { property: "og:site_name", content: "Aura Harmony" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Aura Harmony — Play Music With Your Hands" },
+      {
+        name: "twitter:description",
+        content: "Turn webcam hand gestures into piano, guitar, chords and violin — free in your browser.",
+      },
+    ],
+    links: [{ rel: "canonical", href: "https://svd-studio-p2.lovable.app/" }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "WebApplication",
+          name: "Aura Harmony",
+          url: "https://svd-studio-p2.lovable.app/",
+          applicationCategory: "MultimediaApplication",
+          operatingSystem: "Any (web browser)",
+          description:
+            "Aura Harmony is a gesture-controlled musical instrument: play piano, guitar, chords and violin with webcam hand tracking, free in the browser.",
+          offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+        }),
+      },
     ],
   }),
   component: Landing,

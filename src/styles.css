@@ -328,18 +328,21 @@
   color: color-mix(in oklab, var(--cream) 92%, var(--sienna));
   background-image: linear-gradient(
     115deg,
-    color-mix(in oklab, var(--cream) 96%, transparent) 0%,
-    color-mix(in oklab, var(--sienna) 65%, var(--cream)) 34%,
-    color-mix(in oklab, var(--cream) 98%, transparent) 52%,
-    color-mix(in oklab, var(--walnut) 70%, var(--cream)) 74%,
-    color-mix(in oklab, var(--cream) 94%, transparent) 100%
+    var(--cream) 0%,
+    color-mix(in oklab, var(--sienna) 45%, var(--cream)) 30%,
+    var(--cream) 50%,
+    color-mix(in oklab, var(--walnut) 50%, var(--cream)) 72%,
+    var(--cream) 100%
   );
   background-size: 220% 100%;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 2px 10px color-mix(in oklab, var(--sienna) 45%, transparent))
-    drop-shadow(0 0 26px color-mix(in oklab, var(--cream) 30%, transparent));
+  /* dark under-stroke keeps every letter readable against the glowing waves,
+     warm glow preserves the liquid sheen */
+  filter: drop-shadow(0 1px 1px color-mix(in oklab, var(--greige-deep) 85%, transparent))
+    drop-shadow(0 3px 14px color-mix(in oklab, var(--greige-deep) 70%, transparent))
+    drop-shadow(0 0 22px color-mix(in oklab, var(--cream) 38%, transparent));
   animation: liquid-sheen 9s ease-in-out infinite;
 }
 

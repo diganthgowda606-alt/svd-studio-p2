@@ -12,3 +12,5 @@ Allow: /
 
 User-agent: *
 Allow: /
+
+Sitemap: https://svd-studio-p2.lovable.app/sitemap.xml
