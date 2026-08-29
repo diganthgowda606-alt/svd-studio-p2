@@ -11,16 +11,18 @@ export const Route = createFileRoute("/play")({
       {
         name: "description",
         content:
-          "Step into the Aura Harmony performance space: play a minimalist grand piano or acoustic guitar with webcam hand gestures.",
+          "Step into the Aura Harmony performance space: play piano, guitar, chords and violin with webcam hand gestures.",
       },
       { property: "og:title", content: "Performance Space — Aura Harmony" },
       {
         property: "og:description",
-        content: "Play piano and guitar in the air with real-time hand tracking.",
+        content: "Play piano, guitar, chords and violin in the air with real-time hand tracking.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://svd-studio-p2.lovable.app/play" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
+    links: [{ rel: "canonical", href: "https://svd-studio-p2.lovable.app/play" }],
   }),
   component: Play,
 });
